@@ -2,28 +2,40 @@ namespace F1_simulation.Tyres;
 
 abstract class Tyre
 {
+    // Protected so inherited classes can access
     protected double Slope { get; }
     protected double Intercept { get; }
     public string Name { get; }
-    protected  double[] Lap_times { get; }
+    private readonly double[] _lapTimes;
 
-    protected Tyre(string name, double slope, double intercept)
+
+    protected Tyre(string name, double slope, double intercept, int totalLaps = 72)
     {
         Name = name;
         Slope = slope;
         Intercept = intercept;
-        Lap_times = generate_lap_times();
+        _lapTimes = new double[totalLaps];
+
+        GenerateLapTimes();
     }
 
-    private double[] generate_lap_times(int total_laps = 60)
+    // Most laps at Monaco - 72
+    private void GenerateLapTimes()
     {
-        var times = new double[total_laps];
-        for (int lap = 0; lap < total_laps; lap++)
+
+        for (int lap = 0; lap < _lapTimes.Length; lap++)
         {
-            times[lap] = lap * Slope + Intercept;
+            _lapTimes[lap] = lap * Slope + Intercept;
         }
-        return times;
     }
 
+    // More efficient for slicing
+    public ReadOnlySpan<double> LapTimes => _lapTimes;
+
+    // Convenience helper
+    public ReadOnlySpan<double> GetStint(int startLap, int length)
+    {
+        return _lapTimes.AsSpan(startLap, length);
+    }
     
 }

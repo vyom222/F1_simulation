@@ -1,8 +1,7 @@
 ﻿namespace F1_simulation;
 
-using System.Net.Http;
-using System.Text;
-using System.Text.Json;
+using F1_simulation.api_calling;
+using F1_simulation.Tyres;
 
 class Program
 {
@@ -11,80 +10,46 @@ class Program
     {
         Console.WriteLine("Hello, World!");
 
-        if (!await IsApiHealthy())
+        if (!await TyreModelClient.IsApiHealthy())
         {
-            Console.WriteLine("Tyre API not available");
+            Console.WriteLine("Tyre API not available"); // uvicorn api:app --reload
             return;
         }
 
-        await CallTyreModelAsync();
 
+        var results = await TyreModelClient.CallTyreModelAsync("Spain", 2024);
 
-    }
-
-    public class TyreRequest
-    {
-        public string? country { get; set; }
-        public int year { get; set; }
-    }
-
-    public class TyreResult
-    {
-        public string? Compound { get; set; }
-        public double Slope { get; set; }
-        public double Intercept { get; set; }
-    }
-    
-    static async Task<bool> IsApiHealthy()
-    {
-        var client = new HttpClient();
-
-        try
+        if (results is null)
         {
-            var response = await client.GetAsync("http://127.0.0.1:8000/health");
-            if (!response.IsSuccessStatusCode)
-                return false;
-
-            string json = await response.Content.ReadAsStringAsync();
-            return json.Contains("ok");
+            Console.WriteLine("No results returned");
+            return;
         }
-        catch
-        {
-            return false;
-        }
-    }
 
+        var tyres = new List<Tyre>();
 
-    static async Task CallTyreModelAsync()
-    {
-        var client = new HttpClient();
-
-        // Case matters in the request to ensure no 422 error
-        var request = new TyreRequest
-        {
-            country = "Spain",
-            year = 2024
-        };
-
-        string json = JsonSerializer.Serialize(request);
-
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-        var response = await client.PostAsync(
-            "http://127.0.0.1:8000/tyre_model",
-            content
-        );
-
-        response.EnsureSuccessStatusCode();
-
-        string responseJson = await response.Content.ReadAsStringAsync();
-
-        var results = JsonSerializer.Deserialize<List<TyreResult>>(responseJson);
-
+        // Exclamation mark because I know not null (from my own API)
         foreach (var r in results)
         {
-            Console.WriteLine($"{r.Compound}: slope={r.Slope}, intercept={r.Intercept}");
+            var tyre = TyreCreation.Create(r.Compound!, r.Slope, r.Intercept);
+            tyres.Add(tyre);
         }
+        
+    }
+    
+}
+
+static class TyreCreation
+{
+    public static Tyre Create(string compound, double slope, double intercept)
+    {
+        // Switch statement for cleaner code and readability and allows for later extension
+        return compound.ToUpperInvariant() switch
+        {
+            "SOFT" => new SoftTyre(slope, intercept),
+            "MEDIUM" => new MediumTyre(slope, intercept),
+            "HARD" => new HardTyre(slope, intercept),
+            _ => throw new ArgumentException($"Unknown compound: {compound}")
+        };
     }
 }
 

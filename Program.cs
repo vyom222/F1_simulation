@@ -1,7 +1,7 @@
 ﻿namespace F1_simulation;
 
-using F1_simulation.api_calling;
-using F1_simulation.Tyres;
+using F1_simulation.External;
+using F1_simulation.Core.Tyres;
 
 class Program
 {
@@ -12,7 +12,7 @@ class Program
 
         if (!await TyreModelClient.IsApiHealthy())
         {
-            Console.WriteLine("Tyre API not available"); // uvicorn api:app --reload
+            Console.WriteLine("Tyre API not available"); // uvicorn Python.api:app --reload
             return;
         }
 
@@ -32,7 +32,8 @@ class Program
         {
             var tyre = TyreCreation.Create(r.Compound!, r.Slope, r.Intercept);
             tyres.Add(tyre);
-        }   
+        }
+
     } 
 }
 

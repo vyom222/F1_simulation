@@ -1,4 +1,4 @@
-namespace F1_simulation.api_calling;
+namespace F1_simulation.External;
 
 using System.Net.Http;
 using System.Text;

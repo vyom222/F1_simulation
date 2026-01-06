@@ -1,4 +1,4 @@
-from data_collection import get_curves
+from Python.data_collection import get_curves
 from fastapi import FastAPI
 from pydantic import BaseModel
 
@@ -21,4 +21,4 @@ def health():
     return {"status": "ok"}
 
 
-# uvicorn api:app --reload
+# uvicorn Python.api:app --reload

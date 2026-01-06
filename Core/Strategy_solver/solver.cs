@@ -1,4 +1,4 @@
-namespace F1_simulation.Strategy_solver;
+namespace F1_simulation.Core.Strategy_solver;
 
 public class Optimal_strategy
 {

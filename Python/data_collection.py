@@ -11,8 +11,18 @@ from sklearn.linear_model import LinearRegression, RANSACRegressor, HuberRegress
 from scipy.optimize import curve_fit
 
 ### CHANGE LATER TO DATABASE INSTEAD 
-CACHE_DIR = "cache"
+
+# Changed due to all the refactoring with the directories
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))   # python/
+PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, ".."))
+
+ASSETS_DIR = os.path.join(PROJECT_ROOT, "Assets")
+CACHE_DIR = os.path.join(ASSETS_DIR, "cache")
+PLOT_DIR = os.path.join(ASSETS_DIR, "Tyre_degradation")
+
 os.makedirs(CACHE_DIR, exist_ok=True)
+os.makedirs(PLOT_DIR, exist_ok=True)
+
 
 def fetch_and_cache(url, fname):
     path = os.path.join(CACHE_DIR, fname)
@@ -25,8 +35,8 @@ def fetch_and_cache(url, fname):
         response.raise_for_status()
         data = response.json()
 
-    with open(path, "w") as f:
-        json.dump(data, f)
+        with open(path, "w") as f:
+            json.dump(data, f)
 
     return data
 
@@ -188,7 +198,7 @@ def get_curves(country, year):
             # plt.ylabel('Fuel Corrected Lap Time (seconds)')
             # plt.legend()
             # plt.grid(True)
-            # plt.savefig(f'tyre_degradation_{compound}.png')
+            # plt.savefig(os.path.join(PLOT_DIR, f"tyre_degradation_{compound}.png"))
             # plt.close()
 
 

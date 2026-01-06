@@ -2,6 +2,7 @@
 
 using F1_simulation.External;
 using F1_simulation.Core.Tyres;
+using F1_simulation.Core.Strategy_solver;
 
 class Program
 {

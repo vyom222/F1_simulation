@@ -32,10 +32,8 @@ class Program
         {
             var tyre = TyreCreation.Create(r.Compound!, r.Slope, r.Intercept);
             tyres.Add(tyre);
-        }
-        
-    }
-    
+        }   
+    } 
 }
 
 static class TyreCreation
@@ -54,6 +52,7 @@ static class TyreCreation
 }
 
 // NEXT JOB GET IT TO FIND THE BEST STRATEGY AND OUTPUT IT
+// UNIT TESTS
 // AFTER FIX THE ANOMALY AND LINES SO THAT THEY ARE ACCURATE
 // THEN GET IT TO ALSO OUTPUT THE DRIVER'S LAP TIMES
 // GET IT TO SIMULATE THE RACE - look into thte thing where you simulate many different outcomes?

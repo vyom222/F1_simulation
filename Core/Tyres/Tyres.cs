@@ -1,6 +1,6 @@
 namespace F1_simulation.Core.Tyres
 {
-    abstract class Tyre
+    public abstract class Tyre
     {
         // Protected so inherited classes can access
         protected double Slope { get; }
@@ -37,6 +37,16 @@ namespace F1_simulation.Core.Tyres
         {
             return _lapTimes.AsSpan(startLap, length);
         }
-    
+
+
+
     }
+    public enum TyreType
+    {
+        Soft,
+        Medium,
+        Hard
+    }
+
+
 }

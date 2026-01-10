@@ -76,7 +76,7 @@ namespace F1_simulation.Core.Strategy_solver
                     var next = Solve(nextState);
                     double cost = lapTime + next.TotalTime;
 
-                    if (cost < best.TotalTime)
+                    if (cost < best.TotalTime && !double.IsInfinity(cost))
                     {
                         best = new StrategyResult(
                             cost,
@@ -106,7 +106,7 @@ namespace F1_simulation.Core.Strategy_solver
                 var next = Solve(nextState);
                 double cost = _pitLoss + lapTime + next.TotalTime;
 
-                if (cost < best.TotalTime)
+                if (cost < best.TotalTime && !double.IsInfinity(cost))
                 {
                     best = new StrategyResult(
                         cost,

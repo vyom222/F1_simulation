@@ -6,6 +6,9 @@ namespace F1_simulation.Core.Tyres
         protected double Slope { get; }
         protected double Intercept { get; }
         public string Name { get; }
+        // Public properties for debugging
+        public double GetSlope() => Slope;
+        public double GetIntercept() => Intercept;
         private readonly double[] _lapTimes;
 
 

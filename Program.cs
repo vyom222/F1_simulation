@@ -29,17 +29,32 @@ namespace F1_simulation
 
             // Build tyre objects
             var tyres = new List<Tyre>();
+
             // Exclamation mark because I know not null (from my own API)
+            Console.WriteLine("\n--- Tyre Parameters from API ---\n");
             foreach (var r in results)
             {
+                Console.WriteLine($"{r.Compound}: Slope = {r.Slope:F6}, Intercept = {r.Intercept:F6}");
                 var tyre = TyreCreation.Create(r.Compound!, r.Slope, r.Intercept);
                 tyres.Add(tyre);
             }
+            
+            Console.WriteLine("\n--- Tyre Parameters in Tyre Objects ---\n");
+            foreach (var tyre in tyres)
+            {
+                Console.WriteLine($"{tyre.Name}: Slope = {tyre.GetSlope():F6}, Intercept = {tyre.GetIntercept():F6}");
+                // Also show first few lap times to verify calculation
+                var lapTimeStrings = new List<string>();
+                int lapCount = Math.Min(5, tyre.LapTimes.Length);
+                for (int i = 0; i < lapCount; i++)
+                {
+                    lapTimeStrings.Add(tyre.LapTimes[i].ToString("F2"));
+                }
+                Console.WriteLine($"  First 5 lap times: {string.Join(", ", lapTimeStrings)}");
+            }
+            Console.WriteLine();
 
-            // --------------------------------
             // Create solver
-            // --------------------------------
-
             int raceLength = 66;      // Spain GP laps
             double pitLoss = 25.0;    // seconds (same unit as lap times)
 
@@ -49,9 +64,7 @@ namespace F1_simulation
                 pitLoss
             );
 
-            // --------------------------------
             // Try ALL starting tyres
-            // --------------------------------
 
             OptimalStrategy.StrategyResult? bestFinal = null;
             RaceState? bestStartState = null;
@@ -100,7 +113,13 @@ namespace F1_simulation
 
             var strategy = solver.GetFullStrategy(bestStartState.Value);
 
+            // Debug: Check if strategy uses 2 compounds
+            var compoundsUsed = bestStartState.Value.Usage;
+            int compoundCount = System.Numerics.BitOperations.PopCount((uint)compoundsUsed);
+            Console.WriteLine($"Compounds used in final strategy: {compoundCount}");
+            
             int lap = 1;
+            int pitCount = 0;
             foreach (var step in strategy)
             {
                 if (step.Action == OptimalStrategy.StrategyAction.StayOut)
@@ -110,13 +129,20 @@ namespace F1_simulation
                 else
                 {
                     Console.WriteLine($"Lap {lap}: Pit for {step.PitTo}");
+                    pitCount++;
                 }
 
                 lap++;
             }
+            
+            Console.WriteLine($"Total pit stops: {pitCount}");
+            if (pitCount == 0)
+            {
+                Console.WriteLine("WARNING: No pit stops found! This violates the 2-compound rule.");
+            }
 
             Console.WriteLine(
-                $"\nTotal race time: {bestFinal.Value.TotalTime:F2}"
+                $"\nTotal race time: {bestFinal!.Value.TotalTime:F2}"
             );
 
             Console.WriteLine("\nDone.");
@@ -149,7 +175,6 @@ namespace F1_simulation
 
 
 // NEXT JOB GET IT TO FIND THE BEST STRATEGY AND OUTPUT IT
-// AFTER FIX THE ANOMALY AND LINES SO THAT THEY ARE ACCURATE
 // THEN GET IT TO ALSO OUTPUT THE DRIVER'S LAP TIMES
 // GET IT TO SIMULATE THE RACE - look into the thing where you simulate many different outcomes?
 // CREATE FRONTEND - choose your race, compare your strat, simulate the race and quali?

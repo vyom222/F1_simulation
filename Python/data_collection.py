@@ -64,38 +64,98 @@ TARGET_HARD_SLOPE = 0.05 * DEGRADATION_FACTOR
 INTERCEPT_DIFF = 0.3         # Minimum difference in first lap pace between tyre compounds
 
 
+def infer_missing_tyre(available_tyres):
+
+    compounds = ["SOFT", "MEDIUM", "HARD"]
+    missing = [c for c in compounds if c not in available_tyres]
+    
+    if len(missing) != 1:
+        return None  # Can only infer if exactly one is missing
+    
+    missing_compound = missing[0]
+    result = available_tyres.copy()
+    
+    if missing_compound == "SOFT":
+        # Infer Soft: Soft slope > Medium slope, Soft intercept < Medium intercept - INTERCEPT_DIFF
+        med_slope = available_tyres["MEDIUM"]["Slope"]
+        med_intercept = available_tyres["MEDIUM"]["Intercept"]
+        hard_slope = available_tyres["HARD"]["Slope"]
+        hard_intercept = available_tyres["HARD"]["Intercept"]
+        
+        # Soft slope should be > Medium slope, and close to TARGET_SOFT_SLOPE
+        soft_slope = max(med_slope + 0.01, TARGET_SOFT_SLOPE)
+        # Soft intercept should be < Medium intercept - INTERCEPT_DIFF
+        soft_intercept = med_intercept - INTERCEPT_DIFF - 0.1
+        
+        result["SOFT"] = {"Slope": soft_slope, "Intercept": soft_intercept}
+        
+    elif missing_compound == "MEDIUM":
+        # Infer Medium: Soft slope > Medium slope > Hard slope
+        # Medium intercept between Soft and Hard
+        soft_slope = available_tyres["SOFT"]["Slope"]
+        soft_intercept = available_tyres["SOFT"]["Intercept"]
+        hard_slope = available_tyres["HARD"]["Slope"]
+        hard_intercept = available_tyres["HARD"]["Intercept"]
+        
+        # Medium slope between Soft and Hard, closer to TARGET_MEDIUM_SLOPE
+        med_slope = (soft_slope + hard_slope) / 2
+        med_slope = max(hard_slope + 0.01, min(soft_slope - 0.01, TARGET_MEDIUM_SLOPE))
+        # Medium intercept between Soft and Hard
+        med_intercept = (soft_intercept + hard_intercept) / 2
+        # Ensure constraints: Soft intercept + INTERCEPT_DIFF <= Medium intercept <= Hard intercept - INTERCEPT_DIFF
+        med_intercept = max(soft_intercept + INTERCEPT_DIFF, min(hard_intercept - INTERCEPT_DIFF, med_intercept))
+        
+        result["MEDIUM"] = {"Slope": med_slope, "Intercept": med_intercept}
+        
+    elif missing_compound == "HARD":
+        # Infer Hard: Hard slope < Medium slope, Hard intercept > Medium intercept + INTERCEPT_DIFF
+        soft_slope = available_tyres["SOFT"]["Slope"]
+        soft_intercept = available_tyres["SOFT"]["Intercept"]
+        med_slope = available_tyres["MEDIUM"]["Slope"]
+        med_intercept = available_tyres["MEDIUM"]["Intercept"]
+        
+        # Hard slope should be < Medium slope, and close to TARGET_HARD_SLOPE
+        hard_slope = min(med_slope - 0.01, TARGET_HARD_SLOPE)
+        hard_slope = max(0.001, hard_slope)  # Ensure positive
+        # Hard intercept should be > Medium intercept + INTERCEPT_DIFF
+        hard_intercept = med_intercept + INTERCEPT_DIFF + 0.1
+        
+        result["HARD"] = {"Slope": hard_slope, "Intercept": hard_intercept}
+    
+    return result
+
+
 def fit_tyres_jointly(data_dict):
-    """
-    Jointly fits all three tyre compounds with physical constraints:
-    - Target slopes: Soft ≈ TARGET_SOFT_SLOPE, Medium ≈ TARGET_MEDIUM_SLOPE, Hard ≈ TARGET_HARD_SLOPE
-    - Intercept ordering: Hard > Medium > Soft (with minimum INTERCEPT_DIFF between each)
-    - Slope ordering: Soft > Medium > Hard (soft degrades fastest)
-    
-    Parameters:
-    data_dict: dict with keys "SOFT", "MEDIUM", "HARD", each containing {"X": array, "y": array}
-    
-    Returns:
-    dict with fitted slopes and intercepts for each compound
-    """
     compounds = ["SOFT", "MEDIUM", "HARD"]
     
-    # Check we have all three compounds
-    if not all(c in data_dict for c in compounds):
-        return None
+    # Check which compounds we have data for
+    available_compounds = [c for c in compounds if c in data_dict and len(data_dict[c]["X"]) >= 10]
     
-    # Get initial estimates using HuberRegressor for each compound
+    if len(available_compounds) < 2:
+        return None  # Need at least 2 compounds to infer the third
+    
+    # Get initial estimates using HuberRegressor for each available compound
     initial_params = {}
-    for compound in compounds:
+    for compound in available_compounds:
         X = data_dict[compound]["X"]
         y = data_dict[compound]["y"]
-        if len(X) < 10:
-            return None
         
         model = HuberRegressor(epsilon=1.35, max_iter=200).fit(X, y)
         initial_params[compound] = {
             "slope": max(0.001, model.coef_[0]),  # Ensure positive
             "intercept": model.intercept_
         }
+    
+    # If we only have 2 compounds, infer the missing one
+    if len(available_compounds) == 2:
+        inferred = infer_missing_tyre(initial_params)
+        if inferred:
+            initial_params = inferred
+            # Add empty data for the inferred compound so optimization can proceed
+            missing_compound = [c for c in compounds if c not in available_compounds][0]
+            data_dict[missing_compound] = {"X": np.array([]), "y": np.array([])}
+        else:
+            return None
     
     # Prepare initial parameter vector
     x0 = np.array([
@@ -112,15 +172,16 @@ def fit_tyres_jointly(data_dict):
     def objective(x):
         total_error = 0.0
         
-        # Fit error for each compound
+        # Fit error for each compound (only if we have data)
         for i, compound in enumerate(compounds):
             X = data_dict[compound]["X"]
             y = data_dict[compound]["y"]
-            slope = x[i]
-            intercept = x[i + 3]
-            predicted = slope * X.flatten() + intercept
-            residuals = y - predicted
-            total_error += np.sum(residuals ** 2)
+            if len(X) > 0:  # Only calculate fit error if we have data
+                slope = x[i]
+                intercept = x[i + 3]
+                predicted = slope * X.flatten() + intercept
+                residuals = y - predicted
+                total_error += np.sum(residuals ** 2)
         
         # Penalty for deviating from target slopes (weighted by data size)
         target_slopes = [TARGET_SOFT_SLOPE, TARGET_MEDIUM_SLOPE, TARGET_HARD_SLOPE]
@@ -128,8 +189,12 @@ def fit_tyres_jointly(data_dict):
         for i, target in enumerate(target_slopes):
             slope_diff = (x[i] - target) ** 2
             # Weight by inverse of data size (more data = less penalty for deviation)
+            # For inferred tyres (no data), use higher penalty to stick close to target
             data_size = len(data_dict[compounds[i]]["X"])
-            weight = slope_penalty_weight / max(1, data_size / 50)
+            if data_size == 0:
+                weight = slope_penalty_weight * 2  # Higher penalty for inferred tyres
+            else:
+                weight = slope_penalty_weight / max(1, data_size / 50)
             total_error += weight * slope_diff
         
         return total_error
@@ -344,57 +409,69 @@ def get_curves(country, year):
             if len(X) < min_samples:
                 break
         
-        # if len(X) < 10:
-        #     print(f"Not enough data after outlier removal for {compound}")
-        #     continue
-        
-        # Final check: ensure we have enough data and positive slope
-        # Use HuberRegressor for final fit
-        model = HuberRegressor(epsilon=1.35, max_iter=200).fit(X, y)
-        slope = model.coef_[0]
-        
-        # If slope is negative or very small, we may have removed too many points
-        # Try a more lenient pass if slope is problematic
-        if slope < 0.001 and len(X) < len(all_X) * 0.5:
-            # Re-run with more lenient outlier removal
-            X = np.array(all_X).reshape(-1, 1)
-            y = np.array(all_y)
-            
-            initial_model = HuberRegressor(epsilon=1.35, max_iter=200).fit(X, y)
-            residuals = y - initial_model.predict(X)
-            
-            median_residual = np.median(residuals)
-            mad = np.median(np.abs(residuals - median_residual))
-            if mad > 0:
-                modified_z_scores = 0.6745 * (residuals - median_residual) / mad
-                keep = np.abs(modified_z_scores) < 3.5  # More lenient
-            else:
-                keep = np.ones(len(X), dtype=bool)
-            
-            X = X[keep]
-            y = y[keep]
-            
-            if len(X) >= 10:
+        # Check if we have enough data after outlier removal
+        if len(X) >= 10:
+            # Final check: ensure we have enough data and positive slope
+            # Use HuberRegressor for final fit
+            try:
                 model = HuberRegressor(epsilon=1.35, max_iter=200).fit(X, y)
                 slope = model.coef_[0]
-        
-        intercept = model.intercept_
-        
-        # # Warn if slope is negative (will be fixed by joint optimization)
-        # if slope < 0:
-        #     print(f"Warning: Negative slope detected for {compound} ({slope:.6f}). Will be corrected by joint optimization.")
-
-
-        # Store cleaned data for joint optimization
-        results_dict[compound] = {
-            "X": X,  # Store cleaned data for plotting and joint fitting
-            "y": y,
-            "Slope": slope,  # Initial estimate
-            "Intercept": intercept  # Initial estimate
-        }
+                
+                # If slope is negative or very small, we may have removed too many points
+                # Try a more lenient pass if slope is problematic
+                if slope < 0.001 and len(X) < len(all_X) * 0.5:
+                    # Re-run with more lenient outlier removal
+                    X = np.array(all_X).reshape(-1, 1)
+                    y = np.array(all_y)
+                    
+                    initial_model = HuberRegressor(epsilon=1.35, max_iter=200).fit(X, y)
+                    residuals = y - initial_model.predict(X)
+                    
+                    median_residual = np.median(residuals)
+                    mad = np.median(np.abs(residuals - median_residual))
+                    if mad > 0:
+                        modified_z_scores = 0.6745 * (residuals - median_residual) / mad
+                        keep = np.abs(modified_z_scores) < 3.5  # More lenient
+                    else:
+                        keep = np.ones(len(X), dtype=bool)
+                    
+                    X = X[keep]
+                    y = y[keep]
+                    
+                    if len(X) >= 10:
+                        model = HuberRegressor(epsilon=1.35, max_iter=200).fit(X, y)
+                        slope = model.coef_[0]
+                
+                intercept = model.intercept_
+                
+                # Store cleaned data for joint optimization
+                results_dict[compound] = {
+                    "X": X,  # Store cleaned data for plotting and joint fitting
+                    "y": y,
+                    "Slope": slope,  # Initial estimate
+                    "Intercept": intercept  # Initial estimate
+                }
+            except:
+                # If model fitting fails, store empty data so it can be inferred
+                results_dict[compound] = {
+                    "X": np.array([]),
+                    "y": np.array([]),
+                    "Slope": 0.0,  # Placeholder, will be inferred
+                    "Intercept": 0.0  # Placeholder
+                }
+        else:
+            # If compound has no data or insufficient data, still add it with empty arrays
+            # so joint optimization can infer it from the other compounds
+            results_dict[compound] = {
+                "X": np.array([]),
+                "y": np.array([]),
+                "Slope": 0.0, 
+                "Intercept": 0.0 
+            }
 
     # Joint optimization with physical constraints
-    if len(results_dict) == 3:  # Only do joint optimization if we have all three compounds
+    # Works with 2 or 3 compounds (will infer missing one if only 2 available)
+    if len(results_dict) >= 2:  # Need at least 2 compounds to do joint optimization
         # Prepare data dict for joint fitting
         data_dict = {compound: {"X": results_dict[compound]["X"], "y": results_dict[compound]["y"]} 
                      for compound in COMPOUNDS}

@@ -39,111 +39,57 @@ namespace F1_simulation
                 tyres.Add(tyre);
             }
             
-            Console.WriteLine("\n--- Tyre Parameters in Tyre Objects ---\n");
-            foreach (var tyre in tyres)
-            {
-                Console.WriteLine($"{tyre.Name}: Slope = {tyre.GetSlope():F6}, Intercept = {tyre.GetIntercept():F6}");
-                // Also show first few lap times to verify calculation
-                var lapTimeStrings = new List<string>();
-                int lapCount = Math.Min(5, tyre.LapTimes.Length);
-                for (int i = 0; i < lapCount; i++)
-                {
-                    lapTimeStrings.Add(tyre.LapTimes[i].ToString("F2"));
-                }
-                Console.WriteLine($"  First 5 lap times: {string.Join(", ", lapTimeStrings)}");
-            }
-            Console.WriteLine();
 
             // Create solver
             int raceLength = 66;      // Spain GP laps
             double pitLoss = 25.0;    // seconds (same unit as lap times)
+            double fuelPenalty = 0.05;  // Seconds lost per lap of fuel remaining
+            double windowSize = 2.5;  // 2.5 second window for grouping strategies
+            int numStrategies = 3;     // Find top 3 different compound sequences
 
             var solver = new OptimalStrategy(
                 tyres,
                 raceLength,
-                pitLoss
+                pitLoss,
+                fuelPenalty,
+                windowSize,
+                numStrategies
             );
 
-            // Try ALL starting tyres
+            // Find multiple different strategies with pit windows
+            var strategies = solver.FindMultipleStrategies();
 
-            OptimalStrategy.StrategyResult? bestFinal = null;
-            RaceState? bestStartState = null;
-
-            foreach (var tyre in tyres)
+            if (strategies.Count == 0)
             {
-                var tyreType = tyre.Name switch
-                {
-                    "Soft" => TyreType.Soft,
-                    "Medium" => TyreType.Medium,
-                    "Hard" => TyreType.Hard,
-                    _ => throw new ArgumentException()
-                };
-
-                var startState = new RaceState(
-                    Tyre: tyreType,
-                    TyreAge: 0,                 // brand new
-                    LapsRemaining: raceLength,
-                    Usage: ToUsageFlag(tyreType)
-                );
-
-                var result = solver.Solve(startState);
-
-                Console.WriteLine(
-                    $"Start on {tyreType,-6} → total time = {result.TotalTime:F2}"
-                );
-
-                if (bestFinal is null || result.TotalTime < bestFinal.Value.TotalTime)
-                {
-                    bestFinal = result;
-                    bestStartState = startState;
-                }
-            }
-
-            if (bestStartState is null)
-            {
-                Console.WriteLine("No valid strategy found.");
+                Console.WriteLine("No valid strategies found.");
                 return;
             }
 
-            // --------------------------------
-            // Reconstruct and print strategy
-            // --------------------------------
-
-            Console.WriteLine("\n--- Optimal Strategy ---\n");
-
-            var strategy = solver.GetFullStrategy(bestStartState.Value);
-
-            // Debug: Check if strategy uses 2 compounds
-            var compoundsUsed = bestStartState.Value.Usage;
-            int compoundCount = System.Numerics.BitOperations.PopCount((uint)compoundsUsed);
-            Console.WriteLine($"Compounds used in final strategy: {compoundCount}");
-            
-            int lap = 1;
-            int pitCount = 0;
-            foreach (var step in strategy)
+            // Display each strategy with its pit window ranges
+            for (int i = 0; i < strategies.Count; i++)
             {
-                if (step.Action == OptimalStrategy.StrategyAction.StayOut)
+                var strategy = strategies[i];
+                Console.WriteLine($"\n--- Strategy #{i + 1}: {strategy.CompoundSequence} ---");
+                Console.WriteLine($"Best race time: {strategy.BestTime:F2} seconds");
+                Console.WriteLine($"Time spread across windows: {strategy.TimeSpread:F1} seconds");
+
+                if (strategy.PitWindowRanges.Any())
                 {
-                    //Console.WriteLine($"Lap {lap}: Stay out");
+                    Console.WriteLine("Pit window ranges:");
+                    for (int j = 0; j < strategy.PitWindowRanges.Count; j++)
+                    {
+                        var window = strategy.PitWindowRanges[j];
+                        string lapRange = window.MinLap == window.MaxLap ?
+                            $"lap {window.MinLap}" :
+                            $"laps {window.MinLap}-{window.MaxLap}";
+                        Console.WriteLine($"  Pit {j + 1}: {lapRange} for {window.PitTo} (spread: {window.TimeSpread:F1}s)");
+                    }
                 }
                 else
                 {
-                    Console.WriteLine($"Lap {lap}: Pit for {step.PitTo}");
-                    pitCount++;
+                    Console.WriteLine("No pit stops (single compound strategy)");
                 }
-
-                lap++;
             }
-            
-            Console.WriteLine($"Total pit stops: {pitCount}");
-            if (pitCount == 0)
-            {
-                Console.WriteLine("WARNING: No pit stops found! This violates the 2-compound rule.");
-            }
-
-            Console.WriteLine(
-                $"\nTotal race time: {bestFinal!.Value.TotalTime:F2}"
-            );
 
             Console.WriteLine("\nDone.");
         }

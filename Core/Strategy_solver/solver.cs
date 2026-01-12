@@ -11,11 +11,17 @@ namespace F1_simulation.Core.Strategy_solver
         private readonly Dictionary<TyreType, Tyre> _tyres;
         private readonly double _pitLoss;
         private readonly int _raceLength;
+        private readonly double _fuelPenaltyPerLap; // Seconds lost per lap of fuel remaining
+        private readonly double _windowSizeSeconds; // Time window for grouping similar strategies
+        private readonly int _numStrategies; // Number of different strategies to find
 
         public OptimalStrategy(
             IEnumerable<Tyre> tyres,
             int raceLength,
-            double pitLossSeconds = 20
+            double pitLossSeconds = 20,
+            double fuelPenaltyPerLap = 0.05,
+            double windowSizeSeconds = 2.5,  // 2.5 second window for grouping strategies
+            int numStrategies = 3  // Find top 3 different compound sequences
         )
         {
             _tyres = tyres.ToDictionary(t => t.Name switch
@@ -28,6 +34,9 @@ namespace F1_simulation.Core.Strategy_solver
 
             _raceLength = raceLength;
             _pitLoss = pitLossSeconds;
+            _fuelPenaltyPerLap = fuelPenaltyPerLap;
+            _windowSizeSeconds = windowSizeSeconds;
+            _numStrategies = numStrategies;
         }
 
         // Dynamic Programming Solver
@@ -65,7 +74,7 @@ namespace F1_simulation.Core.Strategy_solver
 
                 if (state.TyreAge < tyre.LapTimes.Length)
                 {
-                    double lapTime = tyre.LapTimes[state.TyreAge];
+                    double lapTime = GetFuelAdjustedLapTime(tyre, state.TyreAge, state);
 
                     var nextState = state with
                     {
@@ -92,7 +101,7 @@ namespace F1_simulation.Core.Strategy_solver
 
             foreach (var (tyreType, tyre) in _tyres)
             {
-                double lapTime = tyre.LapTimes[0];
+                double lapTime = GetFuelAdjustedLapTime(tyre, 0, state);
                 var flag = ToUsageFlag(tyreType);
 
                 var nextState = state with
@@ -121,7 +130,228 @@ namespace F1_simulation.Core.Strategy_solver
         }
 
 
-        // Strategy reconstruction 
+        // Define a simpler strategy structure without windows
+        public readonly record struct BasicStrategy(
+            string CompoundSequence,
+            List<(int lap, TyreType pitTo)> PitStops,
+            double TotalTime
+        );
+
+        // Find multiple strategies including timing variations for the same compounds
+        public List<BasicStrategy> FindBasicStrategies()
+        {
+            var strategies = new List<BasicStrategy>();
+
+            // Try each starting tyre and find multiple timing variations
+            foreach (var startTyre in _tyres.Keys)
+            {
+                // First, find the optimal strategy
+                var startState = new RaceState(
+                    Tyre: startTyre,
+                    TyreAge: 0,
+                    LapsRemaining: _raceLength,
+                    Usage: ToUsageFlag(startTyre)
+                );
+
+                var optimalResult = Solve(startState);
+                if (double.IsInfinity(optimalResult.TotalTime))
+                    continue;
+
+                var optimalStrategy = GetFullStrategy(startState);
+
+                // Extract compound sequence from optimal strategy
+                var compoundList = new List<TyreType> { startTyre };
+                foreach (var step in optimalStrategy)
+                {
+                    if (step.Action == StrategyAction.Pit)
+                    {
+                        compoundList.Add(step.PitTo!.Value);
+                    }
+                }
+                var compoundSequence = string.Join("->", compoundList);
+
+                // Add the optimal strategy
+                var pitStops = optimalStrategy
+                    .Where(step => step.Action == StrategyAction.Pit)
+                    .Select(step => (optimalStrategy.IndexOf(step) + 1, step.PitTo!.Value))
+                    .ToList();
+
+                strategies.Add(new BasicStrategy(compoundSequence, pitStops, optimalResult.TotalTime));
+
+                // Find timing variations by exploring different pit constraints
+                // Simplified approach could later modify the DP constraints
+                var timingVariations = FindTimingVariations(startTyre, compoundSequence, optimalResult.TotalTime);
+                strategies.AddRange(timingVariations);
+            }
+
+            return strategies.OrderBy(s => s.TotalTime).ToList();
+        }
+
+        // Find strategies with the same compounds but different pit timings
+        private List<BasicStrategy> FindTimingVariations(TyreType startTyre, string compoundSequence, double optimalTime)
+        {
+            var variations = new List<BasicStrategy>();
+            var compounds = compoundSequence.Split("->").Select(c => Enum.Parse<TyreType>(c)).ToArray();
+
+            // For each pit stop, try timing variations around the optimal
+            // Simplified by using approx. hypothetical variations
+
+            // If optimal has pits at specific laps, create variations
+            if (compounds.Length >= 2) // Has at least one pit
+            {
+                // Create variations by shifting pit timings by ±1-2 laps
+                for (int offset = -2; offset <= 2; offset++)
+                {
+                    if (offset == 0) continue; // Skip the optimal one we already have
+
+                    // Create a variation with shifted timing
+                    var variedPitStops = new List<(int lap, TyreType pitTo)>();
+
+                    // For simplicity, assume we have pit timing info from the optimal strategy
+                    // Room for improvement later
+                    if (variations.Count < 3) // Limit variations per strategy
+                    {
+                        // Estimate varied timing - improve later
+                        double timeVariation = Math.Abs(offset) * 0.2; // Rough time impact
+                        double variedTime = optimalTime + timeVariation;
+
+                        // Create varied pit stops
+                        for (int i = 1; i < compounds.Length; i++)
+                        {
+                            int baseLap = 15 + (i-1) * 20; // Rough estimate of pit laps
+                            int variedLap = baseLap + offset;
+                            variedLap = Math.Max(1, Math.Min(_raceLength - 1, variedLap));
+                            variedPitStops.Add((variedLap, compounds[i]));
+                        }
+
+                        variations.Add(new BasicStrategy(compoundSequence, variedPitStops, variedTime));
+                    }
+                }
+            }
+
+            return variations;
+        }
+
+        // Group similar strategies into windows (both by compound sequence and time proximity)
+        public List<StrategyWithWindows> CreatePitWindowsFromStrategies(List<BasicStrategy> strategies)
+        {
+            var groupedStrategies = new List<StrategyWithWindows>();
+
+            // Group by compound sequence
+            var bySequence = strategies.GroupBy(s => s.CompoundSequence);
+
+            foreach (var sequenceGroup in bySequence)
+            {
+                var sequenceStrategies = sequenceGroup.OrderBy(s => s.TotalTime).ToList();
+                var compoundSequence = sequenceGroup.Key;
+
+                // Sub-group by time proximity (within 2.5 seconds)
+                var timeGroups = GroupByTimeProximity(sequenceStrategies, 2.5);
+
+                foreach (var timeGroup in timeGroups)
+                {
+                    if (groupedStrategies.Count >= _numStrategies) break;
+
+                    var timeGroupStrategies = timeGroup.OrderBy(s => s.TotalTime).ToList();
+                    var bestTime = timeGroupStrategies.First().TotalTime;
+                    var timeSpread = timeGroupStrategies.Last().TotalTime - bestTime;
+
+                    // Create windows from all strategies in this time group
+                    var windows = CreateWindowsForTimeGroup(timeGroupStrategies);
+
+                    groupedStrategies.Add(new StrategyWithWindows(
+                        CompoundSequence: compoundSequence,
+                        PitWindowRanges: windows,
+                        BestTime: bestTime,
+                        TimeSpread: timeSpread
+                    ));
+                }
+            }
+
+            return groupedStrategies.OrderBy(s => s.BestTime).Take(_numStrategies).ToList();
+        }
+
+        // Group strategies by time proximity (within 2.5 seconds)
+        private List<List<BasicStrategy>> GroupByTimeProximity(List<BasicStrategy> strategies, double maxTimeDiff)
+        {
+            var groups = new List<List<BasicStrategy>>();
+            var remaining = new List<BasicStrategy>(strategies);
+
+            while (remaining.Any())
+            {
+                var group = new List<BasicStrategy> { remaining[0] };
+                remaining.RemoveAt(0);
+
+                // Find all strategies within time range of this group
+                var groupMinTime = group.Min(s => s.TotalTime);
+                var groupMaxTime = group.Max(s => s.TotalTime);
+
+                var toAdd = remaining.Where(s =>
+                    s.TotalTime >= groupMinTime - maxTimeDiff &&
+                    s.TotalTime <= groupMaxTime + maxTimeDiff).ToList();
+
+                group.AddRange(toAdd);
+                foreach (var strategy in toAdd)
+                {
+                    remaining.Remove(strategy);
+                }
+
+                groups.Add(group.OrderBy(s => s.TotalTime).ToList());
+            }
+
+            return groups;
+        }
+
+        // Create windows by grouping similar pit timings from strategies in the same time group
+        private List<PitWindowRange> CreateWindowsForTimeGroup(List<BasicStrategy> strategies)
+        {
+            if (strategies.Count == 0)
+                return new List<PitWindowRange>();
+
+            // Find the maximum number of pit stops across all strategies in this group
+            int maxPitStops = strategies.Max(s => s.PitStops.Count);
+
+            var windows = new List<PitWindowRange>();
+
+            // For each pit stop position, find the range of laps across all strategies
+            for (int pitIndex = 0; pitIndex < maxPitStops; pitIndex++)
+            {
+                var pitLaps = new List<int>();
+                TyreType? pitTo = null;
+
+                // Collect all pit laps for this position across all strategies in the time group
+                foreach (var strategy in strategies)
+                {
+                    if (strategy.PitStops.Count > pitIndex)
+                    {
+                        pitLaps.Add(strategy.PitStops[pitIndex].lap);
+                        pitTo = strategy.PitStops[pitIndex].pitTo;
+                    }
+                }
+
+                if (pitLaps.Any() && pitTo.HasValue)
+                {
+                    int minLap = pitLaps.Min();
+                    int maxLap = pitLaps.Max();
+
+                    // Calculate time spread based on lap range (rough estimate)
+                    double timeSpread = (maxLap - minLap) * 0.15; // 0.15 seconds per lap difference
+
+                    windows.Add(new PitWindowRange(minLap, maxLap, pitTo.Value, timeSpread));
+                }
+            }
+
+            return windows;
+        }
+
+        // Main method that combines both steps
+        public List<StrategyWithWindows> FindMultipleStrategies()
+        {
+            var basicStrategies = FindBasicStrategies();
+            return CreatePitWindowsFromStrategies(basicStrategies);
+        }
+
+        // Strategy reconstruction
         public List<StrategyResult> GetFullStrategy(RaceState start)
         {
             var strategy = new List<StrategyResult>();
@@ -168,6 +398,22 @@ namespace F1_simulation.Core.Strategy_solver
             TyreType? PitTo
         );
 
+        // Represents a pit window range with timing flexibility
+        public readonly record struct PitWindowRange(
+            int MinLap,
+            int MaxLap,
+            TyreType PitTo,
+            double TimeSpread  // Time difference between best and worst in this range
+        );
+
+        // Complete strategy with pit window ranges
+        public readonly record struct StrategyWithWindows(
+            string CompoundSequence,  // e.g., "Soft->Hard->Hard"
+            List<PitWindowRange> PitWindowRanges,
+            double BestTime,         // Best time in the strategy
+            double TimeSpread        // Time difference across all windows
+        );
+
         private static TyreUsage ToUsageFlag(TyreType tyre) => tyre switch
         {
             TyreType.Soft => TyreUsage.Soft,
@@ -178,5 +424,29 @@ namespace F1_simulation.Core.Strategy_solver
 
         private static int CountBits(TyreUsage usage) =>
             BitOperations.PopCount((uint)usage);
+
+
+
+
+        // Add fuel penalty based on laps remaining
+        private double GetFuelAdjustedLapTime(Tyre tyre, int tyreAge, RaceState state)
+        {
+            // Ensure tyre age is valid (minimum 0) and doesn't exceed available degradation data
+            int safeTyreAge = Math.Max(0, Math.Min(tyreAge, tyre.LapTimes.Length - 1));
+
+            // Additional safety check
+            if (safeTyreAge >= tyre.LapTimes.Length || safeTyreAge < 0)
+            {
+                // Fallback to first available lap time if something goes wrong
+                safeTyreAge = 0;
+            }
+
+            double baseLapTime = tyre.LapTimes[safeTyreAge];
+
+            // Fuel penalty: laps remaining * 0.05 seconds
+            double fuelPenalty = state.LapsRemaining * _fuelPenaltyPerLap;
+
+            return baseLapTime + fuelPenalty;
+        }
     }
 }

@@ -19,12 +19,36 @@ namespace F1_simulation
             }
 
             // Fetch tyre model
-            var results = await TyreModelClient.CallTyreModelAsync("Spain", 2024);
+            var results = await TyreModelClient.CallTyreModelAsync("Hungary", 2024);
 
             if (results is null)
             {
                 Console.WriteLine("No results returned");
                 return;
+            }
+
+            // Fetch driver qualifying pace from practice data only
+            var driverData = await TyreModelClient.CallDriverDataAsync("Hungary", 2024);
+
+            if (driverData != null)
+            {
+                Console.WriteLine("\n--- Driver Qualifying Simulation (from Practice Data) ---\n");
+
+                if (driverData.qualifying != null && driverData.qualifying.Count > 0)
+                {
+                    foreach (var driver in driverData.qualifying)
+                    {
+                        Console.WriteLine($"{driver.position}. Driver {driver.driver_number}: {driver.time} ({driver.gap})");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("No qualifying data available.");
+                }
+            }
+            else
+            {
+                Console.WriteLine("No driver data received from API.");
             }
 
             // Build tyre objects

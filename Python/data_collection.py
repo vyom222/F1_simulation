@@ -2,6 +2,7 @@ import os
 import json
 import requests
 import certifi
+import sys
 from collections import defaultdict
 
 import numpy as np
@@ -503,6 +504,65 @@ def get_curves(country, year):
         })
 
     return results
+
+
+def get_driver_data(country, year):
+
+    sessions_url = (
+        f"https://api.openf1.org/v1/sessions?"
+        f"country_name={country}&year={year}&session_type=Practice"
+    )
+    sessions = fetch_and_cache(
+        sessions_url,
+        f"sessions_{country}_{year}_practice_driver_data.json"
+    )
+
+    if not sessions:
+        return {"error": "Could not find practice sessions"}
+
+    # Use the last practice session quali runs (FP3) - could extend to check all sessions later
+    practice_session = sessions[2]
+    practice_key = practice_session["session_key"]
+
+    # Get practice laps (fastest lap per driver)
+    practice_laps_url = f"https://api.openf1.org/v1/laps?session_key={practice_key}"
+    practice_laps = fetch_and_cache(
+        practice_laps_url,
+        f"practice_laps_{country}_{year}_{practice_key}.json"
+    )
+
+    # Process practice data - find fastest lap per driver (simulates qualifying pace)
+    driver_times = {}
+    for lap in practice_laps:
+        if lap.get("lap_duration") and lap.get("driver_number"):
+            driver_num = lap["driver_number"]
+            duration = lap["lap_duration"]
+
+            if driver_num not in driver_times or duration < driver_times[driver_num]["time"]:
+                driver_times[driver_num] = {
+                    "time": duration,
+                    "driver_number": driver_num
+                }
+
+    # Sort by fastest practice lap time (simulates qualifying order)
+    sorted_drivers = sorted(driver_times.values(), key=lambda x: x["time"])
+
+    # Calculate gaps for qualifying simulation
+    quali_results = []
+    if sorted_drivers:
+        fastest_time = sorted_drivers[0]["time"]
+        for i, driver in enumerate(sorted_drivers, 1):
+            gap = driver["time"] - fastest_time
+            quali_results.append({
+                "position": i,
+                "driver_number": driver["driver_number"],
+                "time": f"{driver['time']:.3f}",
+                "gap": f"+{gap:.3f}" if gap > 0 else "0.000"
+            })
+
+    return {
+        "qualifying": quali_results
+    }
 
 
 # if __name__ == "__main__":

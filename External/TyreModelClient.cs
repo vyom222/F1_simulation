@@ -19,6 +19,19 @@ public static class TyreModelClient
         public double Intercept { get; set; }
     }
 
+    public class DriverQualifyingData
+    {
+        public int position { get; set; }
+        public int driver_number { get; set; }
+        public string? time { get; set; }
+        public string? gap { get; set; }
+    }
+
+    public class DriverDataResult
+    {
+        public List<DriverQualifyingData>? qualifying { get; set; }
+    }
+
     public static async Task<bool> IsApiHealthy()
     {
         var client = new HttpClient();
@@ -63,5 +76,31 @@ public static class TyreModelClient
         string responseJson = await response.Content.ReadAsStringAsync();
 
         return JsonSerializer.Deserialize<List<TyreResult>>(responseJson);
+    }
+
+    public static async Task<DriverDataResult?> CallDriverDataAsync(string Country = "Spain", int Year = 2024)
+    {
+        var client = new HttpClient();
+
+        // Get driver qualifying pace from practice data
+        var request = new TyreRequest
+        {
+            country = Country,
+            year = Year
+        };
+
+        string json = JsonSerializer.Serialize(request);
+        var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+        var response = await client.PostAsync(
+            "http://127.0.0.1:8000/driver_data",
+            content
+        );
+
+        response.EnsureSuccessStatusCode();
+
+        string responseJson = await response.Content.ReadAsStringAsync();
+
+        return JsonSerializer.Deserialize<DriverDataResult>(responseJson);
     }
 }

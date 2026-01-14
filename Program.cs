@@ -19,7 +19,7 @@ namespace F1_simulation
             }
 
             // Fetch tyre model
-            var results = await TyreModelClient.CallTyreModelAsync("Hungary", 2024);
+            var results = await TyreModelClient.CallTyreModelAsync("Spain", 2024);
 
             if (results is null)
             {
@@ -27,8 +27,8 @@ namespace F1_simulation
                 return;
             }
 
-            // Fetch driver qualifying pace from practice data only
-            var driverData = await TyreModelClient.CallDriverDataAsync("Hungary", 2024);
+            // Fetch driver qualifying and race pace from practice data only
+            var driverData = await TyreModelClient.CallDriverDataAsync("Spain", 2024);
 
             if (driverData != null)
             {
@@ -38,12 +38,26 @@ namespace F1_simulation
                 {
                     foreach (var driver in driverData.qualifying)
                     {
-                        Console.WriteLine($"{driver.position}. Driver {driver.driver_number}: {driver.time} ({driver.gap})");
+                        Console.WriteLine($"{driver.position}. Driver {driver.driver_number}: ({driver.gap})");
                     }
                 }
                 else
                 {
                     Console.WriteLine("No qualifying data available.");
+                }
+
+                Console.WriteLine("\n--- Driver Race Pace (Residuals vs Baseline Model) ---\n");
+
+                if (driverData.race_pace != null && driverData.race_pace.Count > 0)
+                {
+                    foreach (var driver in driverData.race_pace)
+                    {
+                        Console.WriteLine($"{driver.position}. Driver {driver.driver_number}: ({driver.gap_to_fastest})");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("No race pace data available (insufficient practice data for regression).");
                 }
             }
             else

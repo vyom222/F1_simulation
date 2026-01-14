@@ -27,9 +27,18 @@ public static class TyreModelClient
         public string? gap { get; set; }
     }
 
+    public class DriverRaceData
+    {
+        public int position { get; set; }
+        public int driver_number { get; set; }
+        public string? avg_lap_time { get; set; }
+        public string? gap_to_fastest { get; set; }
+    }
+
     public class DriverDataResult
     {
         public List<DriverQualifyingData>? qualifying { get; set; }
+        public List<DriverRaceData>? race_pace { get; set; }
     }
 
     public static async Task<bool> IsApiHealthy()
@@ -82,7 +91,8 @@ public static class TyreModelClient
     {
         var client = new HttpClient();
 
-        // Get driver qualifying pace from practice data
+        // Get driver qualifying pace and race pace from practice data
+        // Qualifying: fastest lap, Race pace: residuals vs baseline model
         var request = new TyreRequest
         {
             country = Country,

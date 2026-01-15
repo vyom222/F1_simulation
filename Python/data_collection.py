@@ -764,7 +764,6 @@ def get_driver_data(country, year):
             print(f"Race pace regression failed: {e}", file=sys.stderr)
             # Fallback: create synthetic race pace data for all qualifying drivers
             race_results = []
-            import random
             random.seed(42)  # For reproducible results
 
             for driver in quali_results:

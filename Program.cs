@@ -1,6 +1,7 @@
 ﻿using F1_simulation.External;
 using F1_simulation.Core.Tyres;
 using F1_simulation.Core.Strategy_solver;
+using F1_simulation.Core.Race_simulator;
 
 namespace F1_simulation
 {
@@ -9,6 +10,12 @@ namespace F1_simulation
         // Note use of async and Task
         static async Task Main(string[] args)
         {
+            Console.WriteLine("=== RACE SIMULATOR: QUALIFYING DATA ===");
+
+            // Test the RaceSimulator component
+            await RaceSimulator.RunQualifyingSimulation("Spain", 2024);
+
+            Console.WriteLine("\n=== MAIN APPLICATION ===");
             Console.WriteLine("Hello, World!");
 
             // Check API health
@@ -128,6 +135,54 @@ namespace F1_simulation
                     Console.WriteLine("No pit stops (single compound strategy)");
                 }
             }
+
+            // Run race simulation
+            Console.WriteLine("\n=== RACE SIMULATION ===");
+            var raceResult = await RaceSimulator.SimulateRace("Spain", 2024, tyres, 66); // Full F1 race distance
+
+            Console.WriteLine("\n=== FINAL RACE RESULTS ===");
+            Console.WriteLine("Pos\tDriver\tTotal Time\tPit Stops");
+            Console.WriteLine("---\t------\t----------\t----------");
+
+            foreach (var driver in raceResult.FinalPositions)
+            {
+                var pitCount = raceResult.PitStops.GetValueOrDefault(driver.DriverNumber, new List<(int, TyreType)>()).Count;
+                Console.WriteLine($"{driver.Position}\t{driver.DriverNumber}\t{driver.TotalTime:F1}s\t\t{pitCount}");
+            }
+
+            // Show winning driver's strategy in detail
+            var winner = raceResult.FinalPositions.First();
+            var winnerPitStops = raceResult.PitStops.GetValueOrDefault(winner.DriverNumber, new List<(int, TyreType)>());
+
+            Console.WriteLine("\n=== WINNING DRIVER STRATEGY ===");
+            Console.WriteLine($"Driver {winner.DriverNumber} - Champion!");
+            Console.WriteLine($"Starting Tyre: {winner.StartingTyre}");
+
+            // Show the complete tyre strategy
+            Console.WriteLine("Complete Strategy:");
+            var strategySequence = new List<string> { winner.StartingTyre.ToString() };
+            foreach (var (lap, newTyre) in winnerPitStops)
+            {
+                strategySequence.Add($"→ {newTyre} (Pit Lap {lap})");
+            }
+            Console.WriteLine($"  {string.Join(" ", strategySequence)}");
+
+            if (winnerPitStops.Any())
+            {
+                Console.WriteLine("Detailed Pit Stops:");
+                for (int i = 0; i < winnerPitStops.Count; i++)
+                {
+                    var (lap, newTyre) = winnerPitStops[i];
+                    Console.WriteLine($"  Pit {i + 1}: Lap {lap} - {winner.StartingTyre}{(i > 0 ? $"(after {i} stops)" : "")} → {newTyre}");
+                }
+            }
+            else
+            {
+                Console.WriteLine("Strategy: No pit stops - stayed on starting tyres throughout");
+            }
+
+            Console.WriteLine($"Final Position: {winner.Position}");
+            Console.WriteLine($"Total Race Time: {winner.TotalTime:F1} seconds");
 
             Console.WriteLine("\nDone.");
         }

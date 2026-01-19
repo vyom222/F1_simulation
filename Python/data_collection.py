@@ -508,12 +508,6 @@ def get_curves(country, year):
 
 
 def get_driver_data(country, year):
-    """
-    Get driver qualifying and race pace from practice data only
-    Qualifying: fastest lap per driver (simulates quali performance)
-    Race pace: residuals vs baseline model (fuel + tyre age)
-    Returns qualifying order and race pace with gaps to fastest
-    """
 
     # Fetch practice sessions data
     sessions_url = (
@@ -764,7 +758,7 @@ def get_driver_data(country, year):
             print(f"Race pace regression failed: {e}", file=sys.stderr)
             # Fallback: create synthetic race pace data for all qualifying drivers
             race_results = []
-            random.seed(42)  # For reproducible results
+            random.seed(67)  # For reproducible results
 
             for driver in quali_results:
                 # Add random variation to simulate different race performance

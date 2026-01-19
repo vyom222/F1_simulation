@@ -1,0 +1,104 @@
+=== RACE SIMULATOR: QUALIFYING DATA ===
+=== QUALIFYING RESULTS ===
+Pos	Driver	Time		Gap
+---	------	----		---
+1	55	73.013	0.000
+2	4	73.043	+0.030
+3	16	73.050	+0.037
+4	1	73.087	+0.074
+5	63	73.164	+0.151
+6	44	73.359	+0.346
+7	11	73.723	+0.710
+8	23	73.753	+0.740
+9	14	73.786	+0.773
+10	81	73.907	+0.894
+11	31	73.950	+0.937
+12	10	73.964	+0.951
+13	27	73.975	+0.962
+14	77	74.024	+1.011
+15	20	74.074	+1.061
+16	3	74.161	+1.148
+17	18	74.254	+1.241
+18	22	74.420	+1.407
+19	24	74.572	+1.559
+20	2	74.729	+1.716
+
+=== MAIN APPLICATION ===
+Hello, World!
+
+--- Driver Qualifying Simulation (from Practice Data) ---
+
+1. Driver 55: (0.000)
+2. Driver 4: (+0.030)
+3. Driver 16: (+0.037)
+4. Driver 1: (+0.074)
+5. Driver 63: (+0.151)
+6. Driver 44: (+0.346)
+7. Driver 11: (+0.710)
+8. Driver 23: (+0.740)
+9. Driver 14: (+0.773)
+10. Driver 81: (+0.894)
+11. Driver 31: (+0.937)
+12. Driver 10: (+0.951)
+13. Driver 27: (+0.962)
+14. Driver 77: (+1.011)
+15. Driver 20: (+1.061)
+16. Driver 3: (+1.148)
+17. Driver 18: (+1.241)
+18. Driver 22: (+1.407)
+19. Driver 24: (+1.559)
+20. Driver 2: (+1.716)
+
+--- Driver Race Pace (Residuals vs Baseline Model) ---
+
+1. Driver 4: (0.000)
+2. Driver 16: (+0.041)
+3. Driver 1: (+0.056)
+4. Driver 55: (+0.074)
+5. Driver 63: (+0.179)
+6. Driver 44: (+0.287)
+7. Driver 23: (+0.435)
+8. Driver 14: (+0.505)
+9. Driver 81: (+0.519)
+10. Driver 11: (+0.538)
+11. Driver 27: (+0.559)
+12. Driver 31: (+0.573)
+13. Driver 77: (+0.614)
+14. Driver 10: (+0.624)
+15. Driver 20: (+0.712)
+16. Driver 3: (+0.749)
+17. Driver 18: (+0.756)
+18. Driver 22: (+0.911)
+19. Driver 2: (+1.009)
+20. Driver 24: (+1.035)
+
+--- Tyre Parameters from API ---
+
+SOFT: Slope = 0.196579, Intercept = 75.904651
+MEDIUM: Slope = 0.165813, Intercept = 76.204651
+HARD: Slope = 0.110828, Intercept = 76.504651
+
+--- Strategy #1: Soft->Hard->Hard ---
+Best race time: 5290.23 seconds
+Time spread across windows: 0.4 seconds
+Pit window ranges:
+  Pit 1: laps 13-18 for Hard (spread: 0.8s)
+  Pit 2: laps 33-43 for Hard (spread: 1.5s)
+
+--- Strategy #2: Hard->Hard->Soft ---
+Best race time: 5290.23 seconds
+Time spread across windows: 0.4 seconds
+Pit window ranges:
+  Pit 1: laps 13-26 for Hard (spread: 1.9s)
+  Pit 2: laps 33-50 for Soft (spread: 2.5s)
+
+--- Strategy #3: Medium->Hard->Hard ---
+Best race time: 5291.00 seconds
+Time spread across windows: 0.4 seconds
+Pit window ranges:
+  Pit 1: laps 13-19 for Hard (spread: 0.9s)
+  Pit 2: laps 33-43 for Hard (spread: 1.5s)
+
+=== RACE SIMULATION ===
+
+=== LAP 1 ===

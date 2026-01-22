@@ -176,12 +176,13 @@ namespace F1_simulation.Core.Race_simulator
             // Update drivers with race pace
             drivers = drivers.Select(d => d with { RacePace = racePaceDict.GetValueOrDefault(d.DriverNumber, 5.0) }).ToList();
 
-            // Sort by qualifying position (pole position first)
+            // Sort by qualifying position
             drivers = drivers.OrderBy(d => d.Position).ToList();
 
             // Create strategy solvers
             var solver = new OptimalStrategy(tyres, raceLength, pitLoss);
-            var raceSolver = new RaceSolver(tyres, pitLoss, trafficPenalty);
+            var raceSolver = new RaceSolver(tyres, solver, pitLoss, horizon: 10);
+
 
             // Starting tyres are already set in driver creation above
 
@@ -192,7 +193,7 @@ namespace F1_simulation.Core.Race_simulator
                 "Medium" => TyreType.Medium,
                 "Hard" => TyreType.Hard,
                 _ => throw new ArgumentException($"Unknown tyre name {t.Name}")
-            }), raceLength, trafficPenalty));
+            }), raceLength, pitLoss, trafficPenalty));
         }
 
         private static async Task<RaceSimulationResult> SimulateRaceLapByLap(
@@ -201,6 +202,7 @@ namespace F1_simulation.Core.Race_simulator
             RaceSolver raceSolver,
             Dictionary<TyreType, Tyre> tyres,
             int raceLength,
+            double pitLoss,
             double trafficPenalty)
         {
             var lapByLapPositions = new List<List<DriverState>>();
@@ -228,7 +230,7 @@ namespace F1_simulation.Core.Race_simulator
                     // Find this driver in the linked list to get position context
                     var node = driverLinkedList.Find(driver);
 
-                    // Calculate traffic penalty - only if they can't overtake naturally
+                    // Calculate traffic penalty - only if they can't overtake
                     double trafficLoss = node != null ? CalculateTrafficPenalty(driverCopy, node, tyres, trafficPenalty) : 0.0;
 
                     // Get base lap time from tyre + race pace + traffic
@@ -240,46 +242,41 @@ namespace F1_simulation.Core.Race_simulator
                         baseLapTime -= 0.4; // DRS gives 0.4 second advantage
                     }
 
-                    // Check if driver wants to pit - smart logic based on tyre condition and remaining laps
                     // Check if driver wants to pit using DP-based expected cost optimization
                     var gapToCarAhead = node?.Previous != null ?
                         driverCopy.TotalTime - node.Previous.Value.TotalTime : 0.0;
                     var gapToCarBehind = node?.Next != null ?
                         node.Next.Value.TotalTime - driverCopy.TotalTime : double.MaxValue;
 
-                    var pitDecision = raceSolver.ShouldPitThisLap(
-                        driverCopy.CurrentTyre,
-                        driverCopy.TyreAge,
-                        raceLength - lap + 1,
-                        driverCopy.Position,
-                        gapToCarAhead,
-                        gapToCarBehind,
-                        driverCopy.UsedTyres);
-                    if (pitDecision.shouldPit)
+                    var pitDecision = raceSolver.Decide(
+                        absoluteLap: lap,
+                        raceLength: raceLength,
+                        tyre: driverCopy.CurrentTyre,
+                        tyreAge: driverCopy.TyreAge,
+                        usedTyres: driverCopy.UsedTyres,
+                        trafficPenaltyThisLap: trafficLoss
+                    );
+
+                    if (pitDecision.action == StrategyAction.Pit && pitDecision.pitTo.HasValue)
                     {
-                        // Add pit stop time
-                        baseLapTime += 25.0; // pit loss
+                        baseLapTime += pitLoss;
 
-                        // Record pit stop
                         if (!pitStops.ContainsKey(driverCopy.DriverNumber))
-                            pitStops[driverCopy.DriverNumber] = new List<(int lap, TyreType pitTo)>();
+                            pitStops[driverCopy.DriverNumber] = new();
 
-                        pitStops[driverCopy.DriverNumber].Add((lap, pitDecision.pitToTyre.Value));
+                        pitStops[driverCopy.DriverNumber].Add((lap, pitDecision.pitTo.Value));
 
-                        // Update driver state after pit
                         driverCopy = driverCopy with
                         {
-                            CurrentTyre = pitDecision.pitToTyre.Value,
+                            CurrentTyre = pitDecision.pitTo.Value,
                             TyreAge = 0,
-                            UsedTyres = driverCopy.UsedTyres | ToUsageFlag(pitDecision.pitToTyre.Value)
+                            UsedTyres = driverCopy.UsedTyres | ToUsageFlag(pitDecision.pitTo.Value)
                         };
                     }
                     else
                     {
-                        // Increment tyre age
                         driverCopy = driverCopy with { TyreAge = driverCopy.TyreAge + 1 };
                     }
-
                     // Update cumulative time
                     driverCopy = driverCopy with
                     {
@@ -401,7 +398,7 @@ namespace F1_simulation.Core.Race_simulator
                 var initialState = new RaceState(
                     Tyre: startingTyre,
                     TyreAge: 0,
-                    LapsRemaining: 66, // Assume standard race length for strategy calculation
+                    LapsRemaining: 70, // Assume standard race length for strategy calculation
                     Usage: startingTyre switch
                     {
                         TyreType.Soft => TyreUsage.Soft,

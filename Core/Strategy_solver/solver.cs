@@ -43,7 +43,7 @@ namespace F1_simulation.Core.Strategy_solver
         public StrategyResult Solve(RaceState state)
         {
             // ----- Base case -----
-            if (state.LapsRemaining == 0)
+            if (state.LapsRemaining <= 0)
             {
                 // Must use at least 2 different compounds
                 if (CountBits(state.Usage) < 2)

@@ -13,7 +13,7 @@ namespace F1_simulation
             Console.WriteLine("=== RACE SIMULATOR: QUALIFYING DATA ===");
 
             // Test the RaceSimulator component
-            await RaceSimulator.RunQualifyingSimulation("Spain", 2024);
+            await RaceSimulator.RunQualifyingSimulation("Hungary", 2025);
 
             Console.WriteLine("\n=== MAIN APPLICATION ===");
             Console.WriteLine("Hello, World!");
@@ -26,7 +26,7 @@ namespace F1_simulation
             }
 
             // Fetch tyre model
-            var results = await TyreModelClient.CallTyreModelAsync("Spain", 2024);
+            var results = await TyreModelClient.CallTyreModelAsync("Hungary", 2025);
 
             if (results is null)
             {
@@ -35,7 +35,7 @@ namespace F1_simulation
             }
 
             // Fetch driver qualifying and race pace from practice data only
-            var driverData = await TyreModelClient.CallDriverDataAsync("Spain", 2024);
+            var driverData = await TyreModelClient.CallDriverDataAsync("Hungary", 2025);
 
             if (driverData != null)
             {
@@ -86,7 +86,7 @@ namespace F1_simulation
             
 
             // Create solver
-            int raceLength = 66;      // Spain GP laps
+            int raceLength = 70;      // Spain GP laps
             double pitLoss = 25.0;    // seconds (same unit as lap times)
             double fuelPenalty = 0.05;  // Seconds lost per lap of fuel remaining
             double windowSize = 2.5;  // 2.5 second window for grouping strategies
@@ -138,7 +138,7 @@ namespace F1_simulation
 
             // Run race simulation
             Console.WriteLine("\n=== RACE SIMULATION ===");
-            var raceResult = await RaceSimulator.SimulateRace("Spain", 2024, tyres, 66); // Full F1 race distance
+            var raceResult = await RaceSimulator.SimulateRace("Hungary", 2025, tyres, 70); // Full F1 race distance
 
             Console.WriteLine("\n=== FINAL RACE RESULTS ===");
             Console.WriteLine("Pos\tDriver\tTotal Time\tPit Stops");
@@ -213,7 +213,5 @@ namespace F1_simulation
 }
 
 
-// NEXT JOB GET IT TO FIND THE BEST STRATEGY AND OUTPUT IT
-// THEN GET IT TO ALSO OUTPUT THE DRIVER'S LAP TIMES
 // GET IT TO SIMULATE THE RACE - look into the thing where you simulate many different outcomes?
 // CREATE FRONTEND - choose your race, compare your strat, simulate the race and quali?

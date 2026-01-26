@@ -105,6 +105,7 @@ namespace F1_simulation.Core.Race_simulator
             public int Lap { get; init; }
             public LinkedListNode<DriverState>? Node { get; init; } // Reference to linked list node
             public TyreUsage UsedTyres { get; init; } // Track which tyres have been used
+            public double FuelRemaining { get; init; } // Fuel in terms of laps worth of fuel
         }
 
         public record RaceSimulationResult
@@ -159,7 +160,8 @@ namespace F1_simulation.Core.Race_simulator
                     TotalTime = 0.0,
                     HasDRS = false,
                     Lap = 0,
-                    UsedTyres = ToUsageFlag(startingTyre)
+                    UsedTyres = ToUsageFlag(startingTyre),
+                    FuelRemaining = raceLength // Start with full tank (laps worth of fuel)
                 });
             }
 
@@ -254,7 +256,8 @@ namespace F1_simulation.Core.Race_simulator
                         tyre: driverCopy.CurrentTyre,
                         tyreAge: driverCopy.TyreAge,
                         usedTyres: driverCopy.UsedTyres,
-                        trafficPenaltyThisLap: trafficLoss
+                        trafficPenaltyThisLap: trafficLoss,
+                        fuelRemaining: driverCopy.FuelRemaining
                     );
 
                     if (pitDecision.action == StrategyAction.Pit && pitDecision.pitTo.HasValue)
@@ -277,11 +280,12 @@ namespace F1_simulation.Core.Race_simulator
                     {
                         driverCopy = driverCopy with { TyreAge = driverCopy.TyreAge + 1 };
                     }
-                    // Update cumulative time
+                    // Update cumulative time and decrease fuel
                     driverCopy = driverCopy with
                     {
                         TotalTime = driverCopy.TotalTime + baseLapTime,
-                        Lap = lap
+                        Lap = lap,
+                        FuelRemaining = Math.Max(0, driverCopy.FuelRemaining - 1) // Decrease fuel by 1 lap worth
                     };
 
                     lapTimes.Add((driverCopy, baseLapTime));
@@ -353,7 +357,10 @@ namespace F1_simulation.Core.Race_simulator
             int safeTyreAge = Math.Min(driver.TyreAge, tyre.LapTimes.Length - 1);
             double baseTime = tyre.LapTimes[safeTyreAge];
 
-            return baseTime + racePace;
+            // Apply fuel penalty: 0.05 seconds per lap of fuel remaining
+            double fuelPenalty = driver.FuelRemaining * 0.05;
+
+            return baseTime + racePace + fuelPenalty;
         }
 
         private static bool IsWithinDRSDistance(LinkedListNode<DriverState> driverNode)

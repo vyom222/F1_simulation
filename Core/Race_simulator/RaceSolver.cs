@@ -14,13 +14,14 @@ namespace F1_simulation.Core.Race_simulator
         private readonly OptimalStrategy _strategicSolver;
         private readonly double _pitLoss;
         private readonly int _horizon;
-
+        
         private readonly Dictionary<TacticalState, double> _memo = new();
 
         private readonly record struct TacticalState(
             int LapOffset,
             TyreType Tyre,
-            int TyreAge
+            int TyreAge,
+            double FuelRemaining
         );
 
         public RaceSolver(
@@ -48,13 +49,14 @@ namespace F1_simulation.Core.Race_simulator
             TyreType tyre,
             int tyreAge,
             TyreUsage usedTyres,
-            double trafficPenaltyThisLap)
+            double trafficPenaltyThisLap,
+            double fuelRemaining)
         {
             _memo.Clear();
 
-            var start = new TacticalState(0, tyre, tyreAge);
+            var start = new TacticalState(0, tyre, tyreAge, fuelRemaining);
 
-            double stay = Evaluate(start, absoluteLap, raceLength, usedTyres, trafficPenaltyThisLap);
+            double stay = Evaluate(start, absoluteLap, raceLength, usedTyres, trafficPenaltyThisLap, fuelRemaining);
 
             double bestPit = double.PositiveInfinity;
             TyreType? bestTyre = null;
@@ -69,12 +71,12 @@ namespace F1_simulation.Core.Race_simulator
             {
                 foreach (var t in _tyres.Keys)
                 {
-                    var pitState = new TacticalState(1, t, 1);
+                    var pitState = new TacticalState(1, t, 1, fuelRemaining - 1);
 
                     double cost =
                         _pitLoss +
                         _tyres[t].LapTimes[0] +
-                        Evaluate(pitState, absoluteLap, raceLength, usedTyres | ToUsageFlag(t), 0.0);
+                        Evaluate(pitState, absoluteLap, raceLength, usedTyres | ToUsageFlag(t), 0.0, fuelRemaining - 1);
 
                     if (cost < bestPit)
                     {
@@ -94,7 +96,8 @@ namespace F1_simulation.Core.Race_simulator
             int absoluteLap,
             int raceLength,
             TyreUsage usedTyres,
-            double trafficPenalty)
+            double trafficPenalty,
+            double fuelRemaining)
         {
             if (state.LapOffset >= _horizon || absoluteLap + state.LapOffset >= raceLength)
             {
@@ -118,18 +121,21 @@ namespace F1_simulation.Core.Race_simulator
             {
                 double lap =
                     tyre.LapTimes[state.TyreAge] +
-                    (state.LapOffset == 0 ? trafficPenalty : 0.0);
+                    (state.LapOffset == 0 ? trafficPenalty : 0.0) +
+                    (state.FuelRemaining * 0.05); // Apply fuel penalty: 0.05 seconds per lap of fuel
 
                 best = lap + Evaluate(
                     state with
                     {
                         LapOffset = state.LapOffset + 1,
-                        TyreAge = state.TyreAge + 1
+                        TyreAge = state.TyreAge + 1,
+                        FuelRemaining = Math.Max(0, state.FuelRemaining - 1)
                     },
                     absoluteLap,
                     raceLength,
                     usedTyres,
-                    0.0
+                    0.0,
+                    Math.Max(0, fuelRemaining - 1)
                 );
             }
 

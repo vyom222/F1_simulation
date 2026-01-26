@@ -2,6 +2,7 @@
 using F1_simulation.Core.Tyres;
 using F1_simulation.Core.Strategy_solver;
 using F1_simulation.Core.Race_simulator;
+using F1_simulation.Core.Monte_carlo_simulator;
 
 namespace F1_simulation
 {
@@ -13,7 +14,7 @@ namespace F1_simulation
             Console.WriteLine("=== RACE SIMULATOR: QUALIFYING DATA ===");
 
             // Test the RaceSimulator component
-            await RaceSimulator.RunQualifyingSimulation("Hungary", 2025);
+            await RaceSimulator.RunQualifyingSimulation("Spain", 2024);
 
             Console.WriteLine("\n=== MAIN APPLICATION ===");
             Console.WriteLine("Hello, World!");
@@ -26,7 +27,7 @@ namespace F1_simulation
             }
 
             // Fetch tyre model
-            var results = await TyreModelClient.CallTyreModelAsync("Hungary", 2025);
+            var results = await TyreModelClient.CallTyreModelAsync("Spain", 2024);
 
             if (results is null)
             {
@@ -35,7 +36,7 @@ namespace F1_simulation
             }
 
             // Fetch driver qualifying and race pace from practice data only
-            var driverData = await TyreModelClient.CallDriverDataAsync("Hungary", 2025);
+            var driverData = await TyreModelClient.CallDriverDataAsync("Spain", 2024);
 
             if (driverData != null)
             {
@@ -86,7 +87,7 @@ namespace F1_simulation
             
 
             // Create solver
-            int raceLength = 70;      // Spain GP laps
+            int raceLength = 66;      // Spain GP laps
             double pitLoss = 25.0;    // seconds (same unit as lap times)
             double fuelPenalty = 0.05;  // Seconds lost per lap of fuel remaining
             double windowSize = 2.5;  // 2.5 second window for grouping strategies
@@ -138,7 +139,7 @@ namespace F1_simulation
 
             // Run race simulation
             Console.WriteLine("\n=== RACE SIMULATION ===");
-            var raceResult = await RaceSimulator.SimulateRace("Hungary", 2025, tyres, 70); // Full F1 race distance
+            var raceResult = await RaceSimulator.SimulateRace("Spain", 2024, tyres, 66);
 
             Console.WriteLine("\n=== FINAL RACE RESULTS ===");
             Console.WriteLine("Pos\tDriver\tTotal Time\tPit Stops");
@@ -150,7 +151,7 @@ namespace F1_simulation
                 Console.WriteLine($"{driver.Position}\t{driver.DriverNumber}\t{driver.TotalTime:F1}s\t\t{pitCount}");
             }
 
-            // Show winning driver's strategy in detail
+            // Show winning driver's strategy
             var winner = raceResult.FinalPositions.First();
             var winnerPitStops = raceResult.PitStops.GetValueOrDefault(winner.DriverNumber, new List<(int, TyreType)>());
 
@@ -184,6 +185,43 @@ namespace F1_simulation
             Console.WriteLine($"Final Position: {winner.Position}");
             Console.WriteLine($"Total Race Time: {winner.TotalTime:F1} seconds");
 
+            // Run monte carlo simulation
+            Console.WriteLine("\n=== MONTE CARLO SIMULATION ===");
+            Console.WriteLine("Running Monte Carlo simulation with randomized strategies...");
+            
+            var monteCarloSimulator = new MonteCarloSimulator(
+                gaussianNoiseStdDev: 0.3,
+                safetyCarProbability: 0.3,
+                minSafetyCarLap: 5,
+                maxSafetyCarLap: 60
+            );
+
+            var monteCarloResult = await monteCarloSimulator.RunSimulation(
+                country: "Spain",
+                year: 2024,
+                tyres: tyres,
+                raceLength: 66,
+                pitLoss: 25.0,
+                trafficPenalty: 0.5,
+                numSimulations: 1000
+            );
+
+            // Print average positions
+            monteCarloResult.PrintAveragePositions();
+
+            // Print position distribution for top 3 drivers by average position
+            var topDrivers = monteCarloResult.AveragePositions
+                .OrderBy(kvp => kvp.Value)
+                .Take(3)
+                .Select(kvp => kvp.Key)
+                .ToList();
+
+            Console.WriteLine("\n=== Position Distributions for Top 3 Drivers ===");
+            foreach (var driverNum in topDrivers)
+            {
+                monteCarloResult.PrintPositionDistribution(driverNum);
+            }
+
             Console.WriteLine("\nDone.");
         }
 
@@ -213,5 +251,4 @@ namespace F1_simulation
 }
 
 
-// GET IT TO SIMULATE THE RACE - look into the thing where you simulate many different outcomes?
 // CREATE FRONTEND - choose your race, compare your strat, simulate the race and quali?

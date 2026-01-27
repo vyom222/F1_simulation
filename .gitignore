@@ -5,6 +5,7 @@
 
 # Ignore cache directory
 cache/
+.vscode/
 
 # User-specific files
 *.rsuser

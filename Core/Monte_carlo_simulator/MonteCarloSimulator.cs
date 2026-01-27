@@ -521,46 +521,5 @@ namespace F1_simulation.Core.Monte_carlo_simulator
                 Console.WriteLine($"{position}\t\t{count}\t{percentage:F1}%");
             }
         }
-
-        // Prints races with safety cars and the strategies of top 5 finishers
-        public void PrintRacesWithSafetyCarAndStrategies()
-        {
-            var racesWithSafetyCar = AllRaceInfos
-                .Where(r => r.SafetyCarLaps.Count > 0)
-                .Take(2)
-                .ToList();
-
-            if (racesWithSafetyCar.Count == 0)
-            {
-                Console.WriteLine("\nNo races with safety cars found in the simulations.");
-                return;
-            }
-
-            foreach (var race in racesWithSafetyCar)
-            {
-                Console.WriteLine($"\n=== RACE {race.RaceNumber} - SAFETY CAR RACE ===");
-                Console.WriteLine($"Safety Car Laps: {string.Join(", ", race.SafetyCarLaps)}");
-                Console.WriteLine("\n--- Final Results (Top 5) and Strategies ---");
-                Console.WriteLine("Pos\tDriver\tTime (s)\tStrategy\t\tPit Stops");
-                Console.WriteLine("---\t------\t-------\t--------\t\t---------");
-
-                var top5 = race.FinalPositions
-                    .OrderBy(d => d.Position)
-                    .Take(5)
-                    .ToList();
-
-                foreach (var driver in top5)
-                {
-                    if (race.Strategies.TryGetValue(driver.DriverNumber, out var strategy))
-                    {
-                        var pitStops = race.PitStops.TryGetValue(driver.DriverNumber, out var stops)
-                            ? string.Join(", ", stops.Select(p => $"L{p.lap}→{p.pitTo}"))
-                            : "None";
-                        
-                        Console.WriteLine($"{driver.Position}\t{driver.DriverNumber}\t{driver.TotalTime:F1}\t{strategy.CompoundSequence}\t{pitStops}");
-                    }
-                }
-            }
-        }
     }
 }

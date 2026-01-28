@@ -498,10 +498,17 @@ def get_curves(country, year):
         slope = data["Slope"]
         intercept = data["Intercept"]
         
+        # Generate curve points for plotting (0 to 31 laps)
+        max_laps = 31
+        curve_x = list(range(0, max_laps + 1))
+        curve_y = [lap * (slope * DEGRADATION_FACTOR) + intercept for lap in curve_x]
+        
         results.append({
             "Compound": compound,
             "Slope": slope * DEGRADATION_FACTOR,
-            "Intercept": intercept
+            "Intercept": intercept,
+            "CurveX": curve_x,
+            "CurveY": curve_y
         })
 
     return results

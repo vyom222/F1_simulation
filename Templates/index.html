@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>F1 Simulation - Dashboard</title>
     <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         * {
             margin: 0;
@@ -114,6 +115,29 @@
             background: #667eea;
             border-radius: 5px;
         }
+        .chart-container {
+            position: relative;
+            height: 400px;
+            margin-top: 15px;
+        }
+        .legend {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+        }
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 3px;
+        }
     </style>
 </head>
 <body>
@@ -139,66 +163,50 @@
                 <div class="status-message" id="csharpStatus" style="display: none;"></div>
                 <div class="output" id="output" style="display: none;"></div>
             </div>
+
+            <!-- Tyre Curves Card -->
+            <div class="card" style="grid-column: 1 / -1;">
+                <h2>Tyre Degradation Curves</h2>
+                <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    <div>
+                        <label for="countrySelect" style="margin-right: 5px;">Country:</label>
+                        <select id="countrySelect" style="padding: 8px; border-radius: 5px; border: 1px solid #ccc;">
+                            <option value="Spain">Spain</option>
+                            <option value="Hungary">Hungary</option>
+                            <option value="Japan">Japan</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="yearSelect" style="margin-right: 5px;">Year:</label>
+                        <select id="yearSelect" style="padding: 8px; border-radius: 5px; border: 1px solid #ccc;">
+                            <option value="2024">2024</option>
+                            <option value="2025">2025</option>
+                        </select>
+                    </div>
+                    <button id="loadCurvesBtn" onclick="loadTyreCurves()" style="padding: 12px 20px; width: auto; margin-left: auto;">Load Curves</button>
+                </div>
+                <div class="status-message" id="curveStatus" style="display: none;"></div>
+                <div class="chart-container">
+                    <canvas id="tyreCurvesChart"></canvas>
+                </div>
+                <div class="legend">
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #FF0000;"></div>
+                        <span>Soft</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #FFFF00;"></div>
+                        <span>Medium</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #50444457; border: 1px solid #242126;"></div>
+                        <span>Hard</span>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
-    <script>
-        // Check C# API status on page load
-        window.addEventListener('load', function() {
-            // Check C# API health
-            fetch('http://localhost:5000/api/solver/health')
-                .then(response => response.json())
-                .then(data => {
-                    const apiStatus = document.getElementById('apiStatus');
-                    apiStatus.textContent = '✓ ' + data.service;
-                    apiStatus.className = 'status-message status-success';
-                })
-                .catch(error => {
-                    const apiStatus = document.getElementById('apiStatus');
-                    apiStatus.textContent = '✗ Could not connect to C# API. Make sure to run: dotnet run';
-                    apiStatus.className = 'status-message status-error';
-                });
-        });
-
-        function runCSharp() {
-            const button = document.getElementById('runButton');
-            const status = document.getElementById('csharpStatus');
-            const output = document.getElementById('output');
-
-            // Disable button and show loading
-            button.disabled = true;
-            status.textContent = 'Running F1 Simulation Solver...';
-            status.className = 'status-message status-loading';
-            status.style.display = 'block';
-            output.style.display = 'none';
-
-            fetch('http://localhost:5000/api/solver/run-solver?country=Spain&year=2024')
-                .then(response => response.json())
-                .then(data => {
-                    // Update status
-                    if (data.success) {
-                        status.textContent = 'Simulation completed successfully';
-                        status.className = 'status-message status-success';
-                    } else {
-                        status.textContent = 'Simulation encountered errors';
-                        status.className = 'status-message status-error';
-                    }
-
-                    // Display output
-                    output.textContent = data.output || 'No output';
-                    output.style.display = 'block';
-
-                    // Re-enable button
-                    button.disabled = false;
-                })
-                .catch(error => {
-                    status.textContent = 'Error: ' + error;
-                    status.className = 'status-message status-error';
-                    output.textContent = 'Failed to connect to C# API. Make sure to run: dotnet run';
-                    output.style.display = 'block';
-                    button.disabled = false;
-                });
-        }
-    </script>
+    <script src="/static/script.js"></script>
 </body>
 </html>

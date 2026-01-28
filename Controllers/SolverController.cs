@@ -275,6 +275,23 @@ namespace F1_simulation.Controllers
             }
         }
 
+        [HttpGet("tyre-curves")]
+        public async Task<IActionResult> GetTyreCurves([FromQuery] string country = "Spain", [FromQuery] int year = 2024)
+        {
+            try
+            {
+                var results = await TyreModelClient.CallTyreModelAsync(country, year);
+                if (results == null)
+                    return NotFound(new { error = "No tyre curve data found" });
+
+                return Ok(new { success = true, curves = results });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+        }
+
         [HttpGet("python-health")]
         public async Task<IActionResult> CheckPythonHealth()
         {

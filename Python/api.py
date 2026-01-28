@@ -1,6 +1,7 @@
 from Python.data_collection import get_curves, get_driver_data
 from fastapi import FastAPI
 from pydantic import BaseModel
+from fastapi.responses import JSONResponse
 
 app = FastAPI()
 

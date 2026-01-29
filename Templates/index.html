@@ -138,6 +138,84 @@
             height: 20px;
             border-radius: 3px;
         }
+
+        /* Strategy visualization styles */
+        .strategy-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 0;
+        }
+        .strategy-label {
+            width: 120px;
+            flex: 0 0 120px;
+            font-size: 14px;
+            color: #333;
+            text-align: left;
+            padding-right: 8px;
+        }
+        /* hide detailed meta text (we remove it from JS) */
+        .strategy-meta {
+            display: none;
+        }
+        .strategy-bar-wrapper {
+            position: relative;
+            flex: 1 1 auto;
+            width: auto;
+            height: 28px;
+            background: #f3f3f3;
+            border-radius: 6px;
+            overflow: hidden;
+            border: 1px solid #ddd;
+        }
+        .pit-window .pit-label {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 12px;
+            font-weight: 700;
+            color: #000;
+            white-space: nowrap;
+            pointer-events: none;
+            text-shadow: 0 1px 0 rgba(255,255,255,0.8);
+        }
+        .pit-window .pit-label.left { left: 6px; }
+        .pit-window .pit-label.right { right: 6px; }
+        .stint-segment {
+            display: inline-block;
+            height: 100%;
+            position: relative;
+            z-index: 1;
+        }
+        .pit-window {
+            position: absolute;
+            top: 0;
+            height: 100%;
+            background: rgba(144,238,144,1);
+            pointer-events: none;
+            border-left: 2px dashed rgba(0,100,0,0.3);
+            border-right: 2px dashed rgba(0,100,0,0.3);
+            box-shadow: 0 0 8px rgba(144,238,144,0.35);
+            z-index: 10;
+        }
+        .lap-ticks {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            width: 100%;
+            margin-top: 6px;
+            pointer-events: none;
+            z-index: 4;
+        }
+        .lap-tick {
+            position: absolute;
+            top: 0;
+            transform: translateX(-50%);
+            font-size: 12px;
+            color: #000;
+            font-weight: 700;
+            user-select: none;
+        }
     </style>
 </head>
 <body>
@@ -203,6 +281,35 @@
                         <span>Hard</span>
                     </div>
                 </div>
+            </div>
+            <div class="card" style="grid-column: 1 / -1;">
+                <h2>Top Strategies</h2>
+                <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    <button id="loadStratsBtn" onclick="loadStrats()" style="padding: 12px 20px; width: auto; margin-left: auto;">Load Optimum Strategies</button>
+                    <div class="status-message" id="stratStatus" style="display:none; margin-left:10px;"></div>
+                </div>
+                <div id="strategiesContainer" style="display:flex; flex-direction:column; gap:10px;"></div>
+                <div class="legend" id="strategiesLegend" style="margin-top:12px; display:flex; gap:12px;">
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color:#FF0000;"></div>
+                        <span>Soft</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color:#FFFF00; border:1px solid #ddd;"></div>
+                        <span>Medium</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color:#888888;"></div>
+                        <span>Hard</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color:rgba(144,238,144,0.8); border:1px solid rgba(0,100,0,0.2);"></div>
+                        <span>Pit Window</span>
+                    </div>
+                </div>
+ 
+
+
             </div>
         </div>
     </div>

@@ -243,3 +243,171 @@ function plotTyreCurves(curves) {
         showStatus(`Error creating chart: ${e.message}`, 'error');
     }
 }
+
+async function loadStrats(){
+    const country = document.getElementById('countrySelect').value;
+    const year = document.getElementById('yearSelect').value;
+    const button = document.getElementById('loadStratsBtn');
+    const status = document.getElementById('stratStatus');
+    const container = document.getElementById('strategiesContainer');
+
+    if (!country || !year) {
+        status.textContent = 'Select country & year';
+        status.className = 'status-message status-error';
+        status.style.display = 'block';
+        return;
+    }
+
+    button.disabled = true;
+    status.textContent = 'Loading strategies...';
+    status.className = 'status-message status-loading';
+    status.style.display = 'block';
+
+    const url = `http://localhost:5000/api/solver/top-strategies?country=${country}&year=${year}`
+
+
+    let lastError = null;
+
+    console.log('Attempting strategies fetch:', url);
+
+    // Abort previous requests so user can always start a new calculation
+    if (window.currentStratController) {
+        try { window.currentStratController.abort(); } catch(e) { console.warn('Could not abort previous controller', e); }
+        window.currentStratController = null;
+    }
+    // Abortable fetch with timeout
+    const controller = new AbortController();
+    window.currentStratController = controller;
+    const timeoutMs = 10000;
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+        const resp = await fetch(url, { signal: controller.signal, cache: 'no-store' });
+        console.log('Strategies response status:', resp.status);
+        const text = await resp.text();
+        console.log('Raw response text length:', text ? text.length : 0);
+
+        if (!text || !text.trim()) {
+            throw new Error(`Empty response body (status ${resp.status})`);
+        }
+
+        let data;
+        try {
+            data = JSON.parse(text);
+        } catch (e) {
+            throw new Error(`Invalid JSON response: ${e.message} — body truncated: ${text.substring(0,200)}`);
+        }
+
+        if (!data.success || !data.strategies) {
+            throw new Error(data.error || 'No strategies returned');
+        }
+
+        // Render strategies
+        container.innerHTML = '';
+
+        const raceLength = data.strategies.length > 0 && data.strategies[0].stints ? data.strategies[0].stints.reduce((acc, s) => acc + s.length, 0) : 66;
+
+        data.strategies.forEach((s, idx) => {
+            const row = document.createElement('div');
+            row.className = 'strategy-row';
+
+            // Left label (Strategy #)
+            const label = document.createElement('div');
+            label.className = 'strategy-label';
+            label.textContent = `Strategy ${idx + 1}`;
+            row.appendChild(label);
+
+            // Bar wrapper
+            const wrapper = document.createElement('div');
+            wrapper.className = 'strategy-bar-wrapper';
+
+            // Add lap ticks (every 6ish ticks)
+            const ticks = document.createElement('div');
+            ticks.className = 'lap-ticks';
+            const tickInterval = Math.max(1, Math.ceil(raceLength / 6));
+            for (let lap = 1; lap <= raceLength; lap += tickInterval) {
+                const tick = document.createElement('span');
+                tick.className = 'lap-tick';
+                const leftPct = ((lap - 1) / raceLength) * 100;
+                tick.style.left = leftPct + '%';
+                tick.textContent = lap;
+                ticks.appendChild(tick);
+            }
+            wrapper.appendChild(ticks);
+
+            // Add stint segments
+            s.stints.forEach(st => {
+                const seg = document.createElement('div');
+                seg.className = 'stint-segment';
+                const pct = (st.length / raceLength) * 100;
+                seg.style.width = pct + '%';
+                seg.style.backgroundColor = (st.compound.toUpperCase().includes('SOFT')) ? '#FF0000'
+                    : (st.compound.toUpperCase().includes('MEDIUM')) ? '#FFFF00' : '#888888';
+                seg.title = `${st.compound} (${st.length} laps)`;
+                seg.style.display = 'inline-block';
+                seg.style.boxSizing = 'border-box';
+                wrapper.appendChild(seg);
+            });
+
+            // Add pit window overlays (ensure they are on top)
+            (s.windows || []).forEach(w => {
+                console.log('Adding pit window for', w);
+                const win = document.createElement('div');
+                win.className = 'pit-window';
+
+                const minLap = Number(w.min);
+                const maxLap = Number(w.max);
+
+                const leftPct = ((minLap - 1) / raceLength) * 100;
+                const widthPct = ((maxLap - minLap + 1) / raceLength) * 100;
+
+                if (widthPct <= 0) {
+                    console.warn('Skipping pit window with non-positive width:', w, 'computed widthPct:', widthPct);
+                    return;
+                }
+
+                win.style.left = leftPct + '%';
+                win.style.width = widthPct + '%';
+
+                // Force stacking and sizing to ensure visibility
+                win.style.zIndex = '10';
+                win.style.top = '0';
+                win.style.height = '100%';
+
+                // Add numeric labels inside the pit window (min and max)
+                const leftLabelSpan = document.createElement('span');
+                leftLabelSpan.className = 'pit-label left';
+                leftLabelSpan.textContent = minLap;
+                win.appendChild(leftLabelSpan);
+
+                const rightLabelSpan = document.createElement('span');
+                rightLabelSpan.className = 'pit-label right';
+                rightLabelSpan.textContent = maxLap;
+                win.appendChild(rightLabelSpan);
+
+                wrapper.appendChild(win);
+            });
+
+            row.appendChild(wrapper);
+            container.appendChild(row);
+        });
+
+        status.textContent = `Loaded top strategies (${data.strategies.length})`;
+        status.className = 'status-message status-success';
+        status.style.display = 'block';
+        // Re-enable the button so the user can recalculate immediately
+        button.disabled = false;
+        if (window.currentStratController) { window.currentStratController = null; }
+        clearTimeout(timeoutId);
+
+        // Successfully fetched and rendered, we can exit the loop
+        return;
+    } catch (err) {
+        console.error(`Error fetching strategies from ${url}:`, err);
+        lastError = err;
+        clearTimeout(timeoutId);
+        if (window.currentStratController) { window.currentStratController = null; }
+
+    }
+    button.disabled = false;
+}

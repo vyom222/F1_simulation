@@ -89,10 +89,9 @@ namespace F1_simulation.Controllers
                 // Build tyre objects
                 var tyres = new List<Tyre>();
 
-                output.AppendLine("\n--- Tyre Parameters from API ---\n");
                 foreach (var r in results)
                 {
-                    output.AppendLine($"{r.Compound}: Slope = {r.Slope:F6}, Intercept = {r.Intercept:F6}");
+                    // output.AppendLine($"{r.Compound}: Slope = {r.Slope:F6}, Intercept = {r.Intercept:F6}");
                     var tyre = TyreCreation.Create(r.Compound!, r.Slope, r.Intercept);
                     tyres.Add(tyre);
                 }
@@ -118,7 +117,7 @@ namespace F1_simulation.Controllers
 
                 if (strategies.Count == 0)
                 {
-                    output.AppendLine("No valid strategies found.");
+                    //output.AppendLine("No valid strategies found.");
                     return Ok(new { success = false, output = output.ToString() });
                 }
 
@@ -126,25 +125,25 @@ namespace F1_simulation.Controllers
                 for (int i = 0; i < strategies.Count; i++)
                 {
                     var strategy = strategies[i];
-                    output.AppendLine($"\n--- Strategy #{i + 1}: {strategy.CompoundSequence} ---");
-                    output.AppendLine($"Best race time: {strategy.BestTime:F2} seconds");
-                    output.AppendLine($"Time spread across windows: {strategy.TimeSpread:F1} seconds");
+                    // output.AppendLine($"\n--- Strategy #{i + 1}: {strategy.CompoundSequence} ---");
+                    // output.AppendLine($"Best race time: {strategy.BestTime:F2} seconds");
+                    // output.AppendLine($"Time spread across windows: {strategy.TimeSpread:F1} seconds");
 
                     if (strategy.PitWindowRanges.Any())
                     {
-                        output.AppendLine("Pit window ranges:");
+                        // output.AppendLine("Pit window ranges:");
                         for (int j = 0; j < strategy.PitWindowRanges.Count; j++)
                         {
                             var window = strategy.PitWindowRanges[j];
                             string lapRange = window.MinLap == window.MaxLap ?
                                 $"lap {window.MinLap}" :
                                 $"laps {window.MinLap}-{window.MaxLap}";
-                            output.AppendLine($"  Pit {j + 1}: {lapRange} for {window.PitTo} (spread: {window.TimeSpread:F1}s)");
+                            // output.AppendLine($"  Pit {j + 1}: {lapRange} for {window.PitTo} (spread: {window.TimeSpread:F1}s)");
                         }
                     }
                     else
                     {
-                        output.AppendLine("No pit stops (single compound strategy)");
+                        // output.AppendLine("No pit stops (single compound strategy)");
                     }
                 }
 
@@ -220,7 +219,7 @@ namespace F1_simulation.Controllers
                 output.AppendLine("Top 5 Average Positions:");
                 var topPositions = monteCarloResult.AveragePositions
                     .OrderBy(kvp => kvp.Value)
-                    .Take(5);
+                    .Take(20);
 
                 foreach (var kvp in topPositions)
                 {
@@ -292,6 +291,100 @@ namespace F1_simulation.Controllers
             }
         }
 
+        [HttpGet("top-strategies")]
+        public async Task<IActionResult> GetTopStrategies([FromQuery] string country = "Spain", [FromQuery] int year = 2024, [FromQuery] int raceLength = 66)
+        {
+            try
+            {
+                var results = await TyreModelClient.CallTyreModelAsync(country, year);
+                if (results == null)
+                    return NotFound(new { error = "No tyre model data found" });
+
+                var tyres = new List<Tyre>();
+                foreach (var r in results)
+                {
+                    tyres.Add(TyreCreation.Create(r.Compound!, r.Slope, r.Intercept));
+                }
+
+                double pitLoss = 25.0;
+                double fuelPenalty = 0.05;
+                double windowSize = 2;
+                int numStrategies = 3;
+
+                var solver = new OptimalStrategy(
+                    tyres,
+                    raceLength,
+                    pitLoss,
+                    fuelPenalty,
+                    windowSize,
+                    numStrategies
+                );
+
+                // Get strategies with windows and basic strategies for exact pit laps
+                var strategiesWithWindows = solver.FindMultipleStrategies();
+                var basicStrategies = solver.FindBasicStrategies();
+
+                var ordered = strategiesWithWindows.OrderBy(s => s.BestTime).Take(3).ToList();
+
+                var outList = new List<object>();
+
+                foreach (var s in ordered)
+                {
+                    // Try to find a matching basic strategy to get exact pit laps
+                    var match = basicStrategies.FirstOrDefault(b => b.CompoundSequence == s.CompoundSequence);
+
+                    var pitLaps = new List<int>();
+                    if (match.PitStops != null && match.PitStops.Count > 0)
+                    {
+                        pitLaps = match.PitStops.Select(p => p.lap).ToList();
+                    }
+                    else
+                    {
+                        // Fallback: use center of pit windows
+                        pitLaps = s.PitWindowRanges.Select(w => (w.MinLap + w.MaxLap) / 2).ToList();
+                    }
+
+                    // Compute stints lengths
+                    var compounds = s.CompoundSequence.Split("->");
+                    var stints = new List<object>();
+                    int prevLap = 1;
+                    for (int i = 0; i < compounds.Length; i++)
+                    {
+                        int stintLength;
+                        if (i < pitLaps.Count)
+                        {
+                            stintLength = pitLaps[i] - prevLap + 1; // inclusive
+                            prevLap = pitLaps[i] + 1;
+                        }
+                        else
+                        {
+                            stintLength = raceLength - prevLap + 1;
+                        }
+
+                        stints.Add(new { compound = compounds[i], length = stintLength });
+                    }
+
+                    // Build pit windows list
+                    var windows = s.PitWindowRanges.Select(w => new { min = w.MinLap, max = w.MaxLap, pitTo = w.PitTo.ToString() }).ToList();
+
+                    outList.Add(new {
+                        compounds = compounds,
+                        stints = stints,
+                        pit_laps = pitLaps,
+                        windows = windows,
+                        best_time = s.BestTime,
+                        time_spread = s.TimeSpread
+                    });
+                }
+
+                return Ok(new { success = true, strategies = outList });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+        }
+
         [HttpGet("python-health")]
         public async Task<IActionResult> CheckPythonHealth()
         {
@@ -305,7 +398,6 @@ namespace F1_simulation.Controllers
                 return BadRequest(new { error = ex.Message });
             }
         }
-
         private static TyreUsage ToUsageFlag(TyreType tyre) => tyre switch
         {
             TyreType.Soft => TyreUsage.Soft,

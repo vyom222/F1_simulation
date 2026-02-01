@@ -71,7 +71,7 @@ namespace F1_simulation.Core.Monte_carlo_simulator
             {
                 var driverNum = driver.GetProperty("driver_number").GetInt32();
                 var gapStr = driver.GetProperty("gap_to_fastest").GetString();
-                var gap = gapStr == "0.000" ? 0.0 : double.Parse(gapStr.Replace("+", ""));
+                var gap = gapStr == "0.000" ? 0.0 : double.Parse(gapStr!.Replace("+", ""));
                 racePaceDict[driverNum] = gap;
             }
 
@@ -111,11 +111,11 @@ namespace F1_simulation.Core.Monte_carlo_simulator
                     monteCarloSolver);
 
                 raceInfo.RaceNumber = sim + 1;
-                allFinalPositions.Add(result.FinalPositions);
+                allFinalPositions.Add(result.FinalPositions!);
                 allRaceInfos.Add(raceInfo);
 
                 // Track positions
-                foreach (var driver in result.FinalPositions)
+                foreach (var driver in result.FinalPositions!)
                 {
                     if (!positionCounts[driver.DriverNumber].ContainsKey(driver.Position))
                     {
@@ -233,9 +233,9 @@ namespace F1_simulation.Core.Monte_carlo_simulator
 
             var raceInfo = new RaceInfo
             {
-                FinalPositions = raceResult.FinalPositions,
+                FinalPositions = raceResult.FinalPositions!,
                 Strategies = driverStrategies,
-                PitStops = raceResult.PitStops,
+                PitStops = raceResult.PitStops!,
                 SafetyCarLaps = safetyCarLaps.OrderBy(l => l).ToList()
             };
 

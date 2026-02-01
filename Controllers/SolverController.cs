@@ -19,7 +19,7 @@ namespace F1_simulation.Controllers
 
         [HttpGet("run-solver")]
         [HttpPost("run-solver")]
-        public async Task<IActionResult> RunSolver([FromQuery] string country = "Spain", [FromQuery] int year = 2024)
+        public async Task<IActionResult> RunSolver([FromQuery] string country = "Spain", [FromQuery] int year = 2025)
         {
             try
             {
@@ -35,7 +35,7 @@ namespace F1_simulation.Controllers
                 // Check API health
                 if (!await TyreModelClient.IsApiHealthy())
                 {
-                    output.AppendLine("Tyre API not available");
+                    //output.AppendLine("Tyre API not available");
                     return Ok(new { success = false, output = output.ToString() });
                 }
 
@@ -44,46 +44,45 @@ namespace F1_simulation.Controllers
 
                 if (results is null)
                 {
-                    output.AppendLine("No results returned");
+                    //output.AppendLine("No results returned");
                     return Ok(new { success = false, output = output.ToString() });
                 }
 
-                // Fetch driver qualifying and race pace from practice data only
                 var driverData = await TyreModelClient.CallDriverDataAsync(country, year);
 
                 if (driverData != null)
                 {
-                    output.AppendLine("\n--- Driver Qualifying Simulation (from Practice Data) ---\n");
+                    //output.AppendLine("\n--- Driver Qualifying Simulation (from Practice Data) ---\n");
 
                     if (driverData.qualifying != null && driverData.qualifying.Count > 0)
                     {
                         foreach (var driver in driverData.qualifying)
                         {
-                            output.AppendLine($"{driver.position}. Driver {driver.driver_number}: ({driver.gap})");
+                            //output.AppendLine($"{driver.position}. Driver {driver.driver_number}: ({driver.gap})");
                         }
                     }
                     else
                     {
-                        output.AppendLine("No qualifying data available.");
+                        //output.AppendLine("No qualifying data available.");
                     }
 
-                    output.AppendLine("\n--- Driver Race Pace (Residuals vs Baseline Model) ---\n");
+                    //output.AppendLine("\n--- Driver Race Pace (Residuals vs Baseline Model) ---\n");
 
                     if (driverData.race_pace != null && driverData.race_pace.Count > 0)
                     {
                         foreach (var driver in driverData.race_pace)
                         {
-                            output.AppendLine($"{driver.position}. Driver {driver.driver_number}: ({driver.gap_to_fastest})");
+                            //output.AppendLine($"{driver.position}. Driver {driver.driver_number}: ({driver.gap_to_fastest})");
                         }
                     }
                     else
                     {
-                        output.AppendLine("No race pace data available (insufficient practice data for regression).");
+                        //output.AppendLine("No race pace data available (insufficient practice data for regression).");
                     }
                 }
                 else
                 {
-                    output.AppendLine("No driver data received from API.");
+                    //output.AppendLine("No driver data received from API.");
                 }
 
                 // Build tyre objects
@@ -155,15 +154,15 @@ namespace F1_simulation.Controllers
                 output.AppendLine("Pos\tDriver\tTotal Time\tPit Stops");
                 output.AppendLine("---\t------\t----------\t----------");
 
-                foreach (var driver in raceResult.FinalPositions)
+                foreach (var driver in raceResult.FinalPositions!)
                 {
-                    var pitCount = raceResult.PitStops.GetValueOrDefault(driver.DriverNumber, new List<(int, TyreType)>()).Count;
+                    var pitCount = raceResult.PitStops!.GetValueOrDefault(driver.DriverNumber, new List<(int, TyreType)>()).Count;
                     output.AppendLine($"{driver.Position}\t{driver.DriverNumber}\t{driver.TotalTime:F1}s\t\t{pitCount}");
                 }
 
                 // Show winning driver's strategy
                 var winner = raceResult.FinalPositions.First();
-                var winnerPitStops = raceResult.PitStops.GetValueOrDefault(winner.DriverNumber, new List<(int, TyreType)>());
+                var winnerPitStops = raceResult.PitStops!.GetValueOrDefault(winner.DriverNumber, new List<(int, TyreType)>());
 
                 output.AppendLine("\n=== WINNING DRIVER STRATEGY ===");
                 output.AppendLine($"Driver {winner.DriverNumber} - Champion!");
@@ -398,6 +397,38 @@ namespace F1_simulation.Controllers
                 return BadRequest(new { error = ex.Message });
             }
         }
+
+        [HttpGet("qualifying")]
+        public async Task<IActionResult> GetQualifying([FromQuery] string country = "Spain", [FromQuery] int year = 2024)
+        {
+            try
+            {
+                var driverData = await TyreModelClient.CallDriverDataAsync(country, year);
+                return Ok(new {success = true, qualifying = driverData});
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+            
+        }
+
+        [HttpGet("race-pace")]
+        public async Task<IActionResult> GetRacePace([FromQuery] string country = "Spain", [FromQuery] int year = 2024)
+        {
+            try
+            {
+                var racePaceData = await TyreModelClient.CallDriverDataAsync(country, year);
+                return Ok(new {success = true, racePace = racePaceData});
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+            
+        }
+
+
         private static TyreUsage ToUsageFlag(TyreType tyre) => tyre switch
         {
             TyreType.Soft => TyreUsage.Soft,

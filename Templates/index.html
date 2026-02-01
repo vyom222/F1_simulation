@@ -13,7 +13,7 @@
             box-sizing: border-box;
         }
         body {
-            background: linear-gradient(135deg, #ebab3c 0%, #de2d19 100%);
+            background: linear-gradient(135deg, #b1d9e8 0%, #719cf9 100%);
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             padding: 20px;
             min-height: 100vh;
@@ -307,9 +307,26 @@
                         <span>Pit Window</span>
                     </div>
                 </div>
- 
-
-
+            </div>
+            <div class="card" style="grid-column: 1 / -1;">
+                <h2>Qualifying Simulation</h2>
+                <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    <button id="loadQualifyingBtn" onclick="loadQuali()" style="padding: 12px 20px; width: auto; margin-left: auto;">Load Qualifying Data</button>
+                    <div class="status-message" id="qualiStatus" style="display:none; margin-left:10px;"></div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="qualifyingChart"></canvas>
+                </div>
+            </div>
+            <div class="card" style="grid-column: 1 / -1;">
+                <h2>Race Pace Simulation</h2>
+                <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    <button id="loadRacePaceBtn" onclick="loadRacePace()" style="padding: 12px 20px; width: auto; margin-left: auto;">Load Race Pace Data</button>
+                    <div class="status-message" id="racePaceStatus" style="display:none; margin-left:10px;"></div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="racePaceChart"></canvas>
+                </div>
             </div>
         </div>
     </div>

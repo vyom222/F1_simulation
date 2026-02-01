@@ -1,3 +1,92 @@
+// Driver number to surname mapping
+const driverNumberToSurname = {
+    1: 'Verstappen',
+    2: 'Sargeant',
+    3: 'Ricciardo',
+    4: 'Norris',
+    5: 'Bortoleto',
+    6: 'Hadjar',
+    7: 'Doohan',
+    10: 'Gasly',
+    11: 'Perez',
+    12: 'Antonelli',
+    14: 'Alonso',
+    16: 'Leclerc',
+    18: 'Stroll',
+    20: 'Magnussen',
+    21: 'de Vries',
+    22: 'Tsunoda',
+    23: 'Albon',
+    24: 'Zhou',
+    27: 'Hulkenberg',
+    30: 'Lawson',
+    31: 'Ocon',
+    40: 'Lawson',
+    43: 'Colapinto',
+    44: 'Hamilton',
+    55: 'Sainz',
+    63: 'Russell',
+    77: 'Bottas',
+    81: 'Piastri',
+    87: 'Bearman'
+};
+
+// Team name to colour mapping
+const teamToColour = {
+    'MERCEDES': '#40E0D0',
+    'FERRARI': '#FF0000',
+    'RED BULL RACING': '#003366',
+    'RACING BULLS': '#5192d3',
+    'MCLAREN': '#FF5900',
+    'ALPINE': '#ff95e4',
+    'ASTON MARTIN': '#00a86ac5',
+    'WILLIAMS': '#7be0ff',
+    'HAAS': '#9a9999',
+    'ALFA ROMEO': '#8B0000',
+    'SAUBER': '#1dff09',
+    'ALPHATAURI': '#484848',
+};
+
+// Year-specific driver number to team mappings
+const driverNumberToTeamByYear = {
+    '2023': {
+        1: 'Red Bull Racing', 11: 'Red Bull Racing',
+        16: 'Ferrari', 55: 'Ferrari',
+        44: 'Mercedes', 63: 'Mercedes',
+        31: 'Alpine', 10: 'Alpine',
+        4: 'McLaren', 81: 'McLaren',
+        77: 'Alfa Romeo', 24: 'Alfa Romeo',
+        18: 'Aston Martin', 14: 'Aston Martin',
+        20: 'Haas', 27: 'Haas',
+        3: 'AlphaTauri', 22: 'AlphaTauri',
+        23: 'Williams', 2: 'Williams'
+    },
+    '2024': {
+        1: 'Red Bull Racing', 11: 'Red Bull Racing',
+        44: 'Mercedes', 63: 'Mercedes',
+        16: 'Ferrari', 55: 'Ferrari',
+        4: 'McLaren', 81: 'McLaren',
+        14: 'Aston Martin', 18: 'Aston Martin',
+        10: 'Alpine', 31: 'Alpine',
+        27: 'Haas', 20: 'Haas',
+        77: 'Sauber', 24: 'Sauber',
+        3: 'Racing Bulls', 22: 'Racing Bulls',
+        23: 'Williams', 2: 'Williams'
+    },
+    '2025': {
+        4: 'McLaren', 81: 'McLaren',
+        16: 'Ferrari', 44: 'Ferrari',
+        1: 'Red Bull Racing', 30: 'Red Bull Racing',
+        63: 'Mercedes', 12: 'Mercedes',
+        14: 'Aston Martin', 18: 'Aston Martin',
+        10: 'Alpine', 7: 'Alpine', 43: 'Alpine',
+        31: 'Haas', 87: 'Haas',
+        5: 'Sauber', 27: 'Sauber',
+        22: 'Racing Bulls', 6: 'Racing Bulls',
+        23: 'Williams', 55: 'Williams'
+    }
+};
+
 // Check C# API status on page load
 window.addEventListener('load', function() {
     // Check C# API health
@@ -5,12 +94,12 @@ window.addEventListener('load', function() {
         .then(response => response.json())
         .then(data => {
             const apiStatus = document.getElementById('apiStatus');
-            apiStatus.textContent = '✓ ' + data.service;
+            apiStatus.textContent = data.service;
             apiStatus.className = 'status-message status-success';
         })
         .catch(error => {
             const apiStatus = document.getElementById('apiStatus');
-            apiStatus.textContent = '✗ Could not connect to C# API. Make sure to run: dotnet run';
+            apiStatus.textContent = 'Could not connect to C# API. Run: dotnet run';
             apiStatus.className = 'status-message status-error';
         });
 
@@ -152,9 +241,9 @@ function plotTyreCurves(curves) {
     for (const curve of curves) {
         console.log('Processing curve:', curve);
         
-        const compound = curve.compound || curve.Compound;
-        const slope = curve.slope || curve.Slope;
-        const intercept = curve.intercept || curve.Intercept;
+        const compound = curve.compound;
+        const slope = curve.slope;
+        const intercept = curve.intercept;
         
         console.log(`Compound: ${compound}, Slope: ${slope}, Intercept: ${intercept}`);
         
@@ -171,7 +260,7 @@ function plotTyreCurves(curves) {
             continue;
         }
 
-        const color = colors[compound] || { borderColor: '#000000', backgroundColor: 'rgba(0, 0, 0, 0.1)' };
+        const color = colors[compound];
 
         datasets.push({
             label: compound,
@@ -399,9 +488,8 @@ async function loadStrats(){
         button.disabled = false;
         if (window.currentStratController) { window.currentStratController = null; }
         clearTimeout(timeoutId);
-
-        // Successfully fetched and rendered, we can exit the loop
         return;
+        
     } catch (err) {
         console.error(`Error fetching strategies from ${url}:`, err);
         lastError = err;
@@ -410,4 +498,262 @@ async function loadStrats(){
 
     }
     button.disabled = false;
+}
+
+function loadQuali() {
+    const country = document.getElementById('countrySelect').value;
+    const year = document.getElementById('yearSelect').value;
+    const button = document.getElementById('loadQualifyingBtn');
+    const status = document.getElementById('qualiStatus');
+
+    if (!country || !year) {
+        status.textContent = 'Select country & year';
+        status.className = 'status-message status-error';
+        status.style.display = 'block';
+        return;
+    }
+
+    button.disabled = true;
+    status.textContent = 'Loading qualifying data...';
+    status.className = 'status-message status-loading';
+    status.style.display = 'block';
+
+    const url = `http://localhost:5000/api/solver/qualifying?country=${(country)}&year=${year}`;
+
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            const list = (data.qualifying && data.qualifying.qualifying) || [];
+            if (!data.success || !Array.isArray(list) || list.length === 0) {
+                status.textContent = data.error || 'No qualifying data available';
+                status.className = 'status-message status-error';
+                status.style.display = 'block';
+                return;
+            }
+            plotQualifyingBarChart(list);
+            status.textContent = `Loaded ${list.length} drivers`;
+            status.className = 'status-message status-success';
+            status.style.display = 'block';
+        })
+        .catch(err => {
+            status.textContent = 'Error: ' + (err.message || err);
+            status.className = 'status-message status-error';
+            status.style.display = 'block';
+        })
+        .finally(() => {
+            button.disabled = false;
+        });
+}
+
+function parseGapSeconds(gapStr) {
+    if (gapStr == null || gapStr === '') return 0;
+    const s = String(gapStr).replace(/^\+/, '').trim();
+    const n = parseFloat(s);
+    return isNaN(n) ? 0 : n;
+}
+
+function plotQualifyingBarChart(qualifying) {
+    const canvas = document.getElementById('qualifyingChart');
+    if (!canvas) return;
+
+    // Use a name that doesn't conflict with the canvas id (id="qualifyingChart" becomes window.qualifyingChart in browsers)
+    if (window._qualifyingChartInstance && typeof window._qualifyingChartInstance.destroy === 'function') {
+        window._qualifyingChartInstance.destroy();
+        window._qualifyingChartInstance = null;
+    }
+
+    const labels = [];
+    const gapSeconds = [];
+    const backgroundColors = [];
+    const borderColors = [];
+
+    qualifying.forEach(d => {
+        const pos = d.position ?? null;
+        const driverNum = d.driver_number ?? '';
+        const driverSurname = driverNumberToSurname[driverNum];
+        labels.push(`P${pos ?? ''} ${driverSurname}`.trim());
+
+        const gapValue = d.gap;
+        gapSeconds.push(parseGapSeconds(gapValue));
+
+        // Determine team name for that year
+        const selectedYear = document.getElementById('yearSelect')?.value || '2024';
+        const mappingForYear = driverNumberToTeamByYear[selectedYear];
+        const teamFromMap = mappingForYear[Number(driverNum)];
+        const possibleTeam = teamFromMap || '';
+        const normTeam = String(possibleTeam).trim().toUpperCase();
+        const colour = teamToColour[normTeam] || '#BDBDBD';
+        let baseHex = String(colour).trim();
+        backgroundColors.push(baseHex + 'CC');
+        borderColors.push(baseHex);
+    });
+
+    const ctx = canvas.getContext('2d');
+    window._qualifyingChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Gap to fastest (s)',
+                data: gapSeconds,
+                backgroundColor: backgroundColors,
+                borderColor: borderColors,
+                borderWidth: 1
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                title: { display: true, text: 'Qualifying - gap to fastest' }
+            },
+            scales: {
+                x: {
+                    title: { display: true, text: 'Gap (seconds)' },
+                    grid: { display: true }
+                },
+                y: {
+                    title: { display: false },
+                    grid: { display: false },
+                    ticks: {
+                        autoSkip: false
+                    }
+                }
+            }
+        }
+    });
+}
+
+
+
+function loadRacePace() {
+    const country = document.getElementById('countrySelect').value;
+    const year = document.getElementById('yearSelect').value;
+    const button = document.getElementById('loadRacePaceBtn');
+    const status = document.getElementById('racePaceStatus');
+
+    if (!country || !year) {
+        status.textContent = 'Select country & year';
+        status.className = 'status-message status-error';
+        status.style.display = 'block';
+        return;
+    }
+
+    button.disabled = true;
+    status.textContent = 'Loading race pace data...';
+    status.className = 'status-message status-loading';
+    status.style.display = 'block';
+
+    const url = `http://localhost:5000/api/solver/race-pace?country=${(country)}&year=${year}`;
+
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            const raw = data.racePace || [];
+            let list = [];
+            if (Array.isArray(raw)) list = raw;
+            else if (raw) list = raw.race_pace || [];
+
+            if (!data.success || !Array.isArray(list) || list.length === 0) {
+                status.textContent = data.error || 'No race pace data available';
+                status.className = 'status-message status-error';
+                status.style.display = 'block';
+                return;
+            }
+            plotRacePaceBarChart(list);
+            status.textContent = `Loaded ${list.length} drivers`;
+            status.className = 'status-message status-success';
+            status.style.display = 'block';
+        })
+        .catch(err => {
+            status.textContent = 'Error: ' + (err.message || err);
+            status.className = 'status-message status-error';
+            status.style.display = 'block';
+        })
+        .finally(() => {
+            button.disabled = false;
+        });
+}
+
+/** Parse gap string to seconds - remove the '+' */
+function parseGapSeconds(gapStr) {
+    if (gapStr == null || gapStr === '') return 0;
+    const s = String(gapStr).replace(/^\+/, '').trim();
+    const n = parseFloat(s);
+    return isNaN(n) ? 0 : n;
+}
+
+function plotRacePaceBarChart(racePace) {
+    const canvas = document.getElementById('racePaceChart');
+    if (!canvas) return;
+
+    if (window._racePaceChartInstance && typeof window._racePaceChartInstance.destroy === 'function') {
+        window._racePaceChartInstance.destroy();
+        window._racePaceChartInstance = null;
+    }
+
+    const labels = [];
+    const gapSeconds = [];
+    const backgroundColors = [];
+    const borderColors = [];
+
+    racePace.forEach(d => {
+        const pos = d.position ?? null;
+        const driverNum = d.driver_number ?? '';
+        const driverSurname = driverNumberToSurname[driverNum];
+        labels.push(`P${pos ?? ''} ${driverSurname}`.trim());
+
+        const gapValue = d.gap_to_fastest;
+        gapSeconds.push(parseGapSeconds(gapValue));
+
+        // Determine team name: select mapping for the currently selected year first
+        const selectedYear = document.getElementById('yearSelect')?.value || '2024';
+        const mappingForYear = driverNumberToTeamByYear[selectedYear];
+        const teamFromMap = mappingForYear[Number(driverNum)];
+        const possibleTeam = teamFromMap || '';
+        const normTeam = String(possibleTeam).trim().toUpperCase();
+        const colour = teamToColour[normTeam] || '#BDBDBD';
+        let baseHex = String(colour).trim();
+        backgroundColors.push(baseHex + 'CC');
+        borderColors.push(baseHex);
+    });
+
+    const ctx = canvas.getContext('2d');
+    window._racePaceChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Gap to fastest (s)',
+                data: gapSeconds,
+                backgroundColor: backgroundColors,
+                borderColor: borderColors,
+                borderWidth: 1
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                title: { display: true, text: 'Race Pace - gap to fastest' }
+            },
+            scales: {
+                x: {
+                    title: { display: true, text: 'Gap (seconds)' },
+                    grid: { display: true }
+                },
+                y: {
+                    title: { display: false },
+                    grid: { display: false },
+                    ticks: {
+                        autoSkip: false
+                    }
+                }
+            }
+        }
+    });
 }

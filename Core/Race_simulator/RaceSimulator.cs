@@ -170,7 +170,7 @@ namespace F1_simulation.Core.Race_simulator
             {
                 var driverNum = driver.GetProperty("driver_number").GetInt32();
                 var gapStr = driver.GetProperty("gap_to_fastest").GetString();
-                var gap = gapStr == "0.000" ? 0.0 : double.Parse(gapStr.Replace("+", ""));
+                var gap = gapStr == "0.000" ? 0.0 : double.Parse(gapStr!.Replace("+", ""));
 
                 racePaceDict[driverNum] = gap;
             }

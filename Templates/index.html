@@ -328,6 +328,79 @@
                     <canvas id="racePaceChart"></canvas>
                 </div>
             </div>
+            <div class="card">
+                <h2>Monte Carlo Distribution</h2>
+                <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    <div>
+                        <label for="mcDriverSelect" style="margin-right: 5px;">Driver:</label>
+                        <select id="mcDriverSelect" style="padding: 8px; border-radius: 5px; border: 1px solid #ccc;"></select>
+                    </div>
+                    <div>
+                        <label for="mcSims" style="margin-right: 5px;">Simulations:</label>
+                        <input id="mcSims" type="number" value="1000" style="width:100px; padding:8px; border-radius:5px; border:1px solid #ccc;" />
+                    </div>
+                    <button id="loadMonteBtn" onclick="loadMonteCarlo()" style="padding: 12px 20px; width: auto; margin-left: auto;">Load Monte Carlo</button>
+                    <div class="status-message" id="monteStatus" style="display:none; margin-left:10px;"></div>
+                </div>
+                <div style="display:flex; gap:18px; align-items:center; margin-bottom:8px; flex-wrap:wrap">
+                    <div><strong>Expected Position:</strong> <span id="mcExpected">-</span></div>
+                    <div><strong>Median Position:</strong> <span id="mcMedian">-</span></div>
+                    <div><strong>Most Likely (Mode):</strong> <span id="mcMode">-</span></div>
+                    <div><strong>Expected Points:</strong> <span id="mcPoints">-</span></div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="monteCarloChart"></canvas>
+                </div>
+            </div>
+            <div class="card">
+                <h2>Expected Standings</h2>
+                <div id="standingsContainer" style="display: none;">
+                    <p style="margin-bottom: 15px; color: #666; font-size: 14px;">Based on Monte Carlo average positions</p>
+                    <div style="overflow-y: auto; max-height: 500px;">
+                        <table id="standingsTable" style="width: 100%; border-collapse: collapse; background: white;">
+                            <thead style="position: sticky; top: 0; background: white;">
+                                <tr style="background-color: #667eea; color: white;">
+                                    <th style="padding: 10px; text-align: center; border: 1px solid #ddd; width: 60px;">Pos</th>
+                                    <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Driver</th>
+                                    <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Expected Posiition</th>
+                                </tr>
+                            </thead>
+                            <tbody id="standingsBody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div id="standingsEmpty" style="color: #999; text-align: center; padding: 40px 20px;">
+                    Load Monte Carlo simulation to see expected standings
+                </div>
+            </div>
+            <div class="card" style="grid-column: 1 / -1;">
+                <h2>Race Simulation Results</h2>
+                <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    <button id="loadRaceSimBtn" onclick="loadRaceSimulation()" style="padding: 12px 20px; width: auto; margin-left: auto;">Run Race Simulation</button>
+                    <div class="status-message" id="raceSimStatus" style="display:none; margin-left:10px;"></div>
+                </div>
+                <div id="raceResultsContainer" style="display: none;">
+                    <div style="overflow-x: auto;">
+                        <table id="raceResultsTable" style="width: 100%; border-collapse: collapse; background: white;">
+                            <thead>
+                                <tr style="background-color: #667eea; color: white;">
+                                    <th style="padding: 12px; text-align: left; border: 1px solid #ddd;">Position</th>
+                                    <th style="padding: 12px; text-align: left; border: 1px solid #ddd;">Driver</th>
+                                    <th style="padding: 12px; text-align: left; border: 1px solid #ddd;">Strategy</th>
+                                    <th style="padding: 12px; text-align: right; border: 1px solid #ddd;">Total Time</th>
+                                    <th style="padding: 12px; text-align: right; border: 1px solid #ddd;">Delta to First</th>
+                                </tr>
+                            </thead>
+                            <tbody id="raceResultsBody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div id="raceResultsEmpty" style="color: #999; text-align: center; padding: 20px;">
+                    Run race simulation to see results
+                </div>
+            </div>
         </div>
     </div>
 

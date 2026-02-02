@@ -290,6 +290,53 @@ namespace F1_simulation.Controllers
             }
         }
 
+        [HttpGet("montecarlo")]
+        public async Task<IActionResult> GetMonteCarlo([FromQuery] string country = "Spain", [FromQuery] int year = 2024, [FromQuery] int numSimulations = 1000)
+        {
+            try
+            {
+                var results = await TyreModelClient.CallTyreModelAsync(country, year);
+                if (results == null)
+                    return NotFound(new { error = "No tyre model data found" });
+
+                var tyres = new List<Tyre>();
+                foreach (var r in results)
+                {
+                    tyres.Add(TyreCreation.Create(r.Compound!, r.Slope, r.Intercept));
+                }
+
+                var monteCarloSimulator = new MonteCarloSimulator();
+                var monteCarloResult = await monteCarloSimulator.RunSimulation(
+                    country: country,
+                    year: year,
+                    tyres: tyres,
+                    raceLength: 66,
+                    pitLoss: 25.0,
+                    trafficPenalty: 0.5,
+                    numSimulations: numSimulations
+                );
+
+                // Convert PositionCounts to a serializable structure
+                var positionCountsOut = new Dictionary<int, Dictionary<int, int>>();
+                foreach (var kvp in monteCarloResult.PositionCounts)
+                {
+                    positionCountsOut[kvp.Key] = kvp.Value.ToDictionary(x => x.Key, x => x.Value);
+                }
+
+                return Ok(new {
+                    success = true,
+                    averagePositions = monteCarloResult.AveragePositions,
+                    positionCounts = positionCountsOut,
+                    simulations = monteCarloResult.AllSimulations?.Count ?? 0,
+                    medianPosition = monteCarloResult.MedianPosition
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+        }
+
         [HttpGet("top-strategies")]
         public async Task<IActionResult> GetTopStrategies([FromQuery] string country = "Spain", [FromQuery] int year = 2024, [FromQuery] int raceLength = 66)
         {
@@ -426,6 +473,64 @@ namespace F1_simulation.Controllers
                 return BadRequest(new { error = ex.Message });
             }
             
+        }
+
+        [HttpGet("race-simulation")]
+        public async Task<IActionResult> GetRaceSimulation([FromQuery] string country = "Spain", [FromQuery] int year = 2024, [FromQuery] int raceLength = 66)
+        {
+            try
+            {
+                var results = await TyreModelClient.CallTyreModelAsync(country, year);
+                if (results == null)
+                    return NotFound(new { error = "No tyre model data found" });
+
+                var tyres = new List<Tyre>();
+                foreach (var r in results)
+                {
+                    tyres.Add(TyreCreation.Create(r.Compound!, r.Slope, r.Intercept));
+                }
+
+                // Run race simulation
+                var raceResult = await RaceSimulator.SimulateRace(country, year, tyres, raceLength);
+
+                // Build race results data
+                var raceResults = new List<object>();
+                double? firstPlaceTime = null;
+
+                foreach (var driver in raceResult.FinalPositions!.OrderBy(d => d.Position))
+                {
+                    if (firstPlaceTime == null)
+                        firstPlaceTime = driver.TotalTime;
+
+                    // Get strategy from pit stops
+                    var pitStops = raceResult.PitStops!.GetValueOrDefault(driver.DriverNumber, new List<(int, TyreType)>());
+                    var strategyParts = new List<string> { driver.StartingTyre.ToString()[0].ToString() };
+                    foreach (var pitStop in pitStops)
+                    {
+                        strategyParts.Add(pitStop.Item2.ToString()[0].ToString());
+                    }
+                    var strategyString = string.Join("-", strategyParts);
+
+                    var deltaToFirst = driver.Position == 1 ? 0.0 : driver.TotalTime - firstPlaceTime.Value;
+
+                    raceResults.Add(new {
+                        position = driver.Position,
+                        driverNumber = driver.DriverNumber,
+                        strategy = strategyString,
+                        totalTime = driver.TotalTime,
+                        deltaToFirst = deltaToFirst
+                    });
+                }
+
+                return Ok(new {
+                    success = true,
+                    raceResults = raceResults
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
         }
 
 

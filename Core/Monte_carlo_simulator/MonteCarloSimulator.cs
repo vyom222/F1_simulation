@@ -143,12 +143,18 @@ namespace F1_simulation.Core.Monte_carlo_simulator
                 averagePositions[driverNum] = count > 0 ? totalPosition / count : 0.0;
             }
 
+            var medianPosition = averagePositions.Values
+                .OrderBy(x => x)
+                .Skip(averagePositions.Count / 2)
+                .First();
+
             return new MonteCarloResult
             {
                 AveragePositions = averagePositions,
                 PositionCounts = positionCounts,
                 AllSimulations = allFinalPositions,
-                AllRaceInfos = allRaceInfos
+                AllRaceInfos = allRaceInfos,
+                MedianPosition = medianPosition
             };
         }
 
@@ -478,6 +484,8 @@ namespace F1_simulation.Core.Monte_carlo_simulator
         public Dictionary<int, Dictionary<int, int>> PositionCounts { get; set; } = new();
         public List<List<RaceSimulator.DriverState>> AllSimulations { get; set; } = new();
         public List<RaceInfo> AllRaceInfos { get; set; } = new();
+
+        public double MedianPosition {get; set;} = new();
 
         // Prints the average positions in a formatted table
         public void PrintAveragePositions()

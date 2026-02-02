@@ -757,3 +757,385 @@ function plotRacePaceBarChart(racePace) {
         }
     });
 }
+
+// Load race simulation results
+async function loadRaceSimulation() {
+    const country = document.getElementById('countrySelect').value;
+    const year = document.getElementById('yearSelect').value;
+    const status = document.getElementById('raceSimStatus');
+    const btn = document.getElementById('loadRaceSimBtn');
+
+    if (!country || !year) {
+        status.textContent = 'Select country & year';
+        status.className = 'status-message status-error';
+        status.style.display = 'block';
+        return;
+    }
+
+    btn.disabled = true;
+    status.textContent = 'Running race simulation...';
+    status.className = 'status-message status-loading';
+    status.style.display = 'block';
+
+    try {
+        const url = `http://localhost:5000/api/solver/race-simulation?country=${country}&year=${year}&raceLength=66`;
+        const resp = await fetch(url);
+        const data = await resp.json();
+        if (!data.success) throw new Error(data.error || 'Race simulation failed');
+
+        // Populate race results table
+        if (data.raceResults && data.raceResults.length > 0) {
+            populateRaceResultsTable(data.raceResults);
+            status.textContent = 'Race simulation complete';
+            status.className = 'status-message status-success';
+        } else {
+            throw new Error('No race results returned');
+        }
+    } catch (err) {
+        console.error('Race simulation error', err);
+        status.textContent = 'Error: ' + (err.message || err);
+        status.className = 'status-message status-error';
+    } finally {
+        btn.disabled = false;
+        status.style.display = 'block';
+    }
+}
+
+// Load Monte Carlo distribution and render chart
+async function loadMonteCarlo() {
+    const country = document.getElementById('countrySelect').value;
+    const year = document.getElementById('yearSelect').value;
+    const sims = Number(document.getElementById('mcSims').value) || 1000;
+    const status = document.getElementById('monteStatus');
+    const btn = document.getElementById('loadMonteBtn');
+
+    if (!country || !year) {
+        status.textContent = 'Select country & year';
+        status.className = 'status-message status-error';
+        status.style.display = 'block';
+        return;
+    }
+
+    btn.disabled = true;
+    status.textContent = 'Running Monte Carlo...';
+    status.className = 'status-message status-loading';
+    status.style.display = 'block';
+
+    try {
+        const url = `http://localhost:5000/api/solver/montecarlo?country=${country}&year=${year}&numSimulations=${sims}`;
+        const resp = await fetch(url);
+        const data = await resp.json();
+        if (!data.success) throw new Error(data.error || 'Monte Carlo failed');
+
+        const avg = data.averagePositions || {};
+        const counts = data.positionCounts || {};
+
+        // Populate driver select
+        const select = document.getElementById('mcDriverSelect');
+        select.innerHTML = '';
+        const driverNums = Object.keys(avg).map(k => Number(k)).sort((a,b)=>a-b);
+        driverNums.forEach(dn => {
+            const opt = document.createElement('option');
+            const name = driverNumberToSurname[dn] || dn;
+            opt.value = dn;
+            opt.textContent = `${name} (${dn})`;
+            select.appendChild(opt);
+        });
+
+        // When selection changes, replot
+        select.onchange = () => plotMonteCarloDistribution(avg, counts);
+
+        // show expected for first
+        plotMonteCarloDistribution(avg, counts);
+
+        // Populate standings table
+        populateStandingsTable(avg);
+
+        status.textContent = `Monte Carlo loaded (${data.simulations || sims} sims)`;
+        status.className = 'status-message status-success';
+        status.style.display = 'block';
+    } catch (err) {
+        console.error('Monte Carlo error', err);
+        status.textContent = 'Error: ' + (err.message || err);
+        status.className = 'status-message status-error';
+        status.style.display = 'block';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+function plotMonteCarloDistribution(averagePositions, positionCounts) {
+    const select = document.getElementById('mcDriverSelect');
+    if (!select || !select.value) return;
+    const driverNum = Number(select.value);
+    const dist = positionCounts[driverNum] || {};
+
+    // Build labels (positions) sorted
+    const positions = Object.keys(dist).map(k => Number(k)).sort((a,b)=>a-b);
+    const counts = positions.map(p => dist[p] || 0);
+    const total = counts.reduce((a,b)=>a+b, 0) || 1;
+    const percentages = counts.map(c => (c/total*100));
+
+    // Update expected position display
+    const expected = averagePositions[driverNum];
+    const expEl = document.getElementById('mcExpected');
+    expEl.textContent = expected ? expected.toFixed(2) : '-';
+
+    // Compute median position
+    let medianPos = '-';
+    if (positions.length > 0) {
+        let cum = 0;
+        for (let i = 0; i < positions.length; i++) {
+            cum += dist[positions[i]];
+            if (cum / total >= 0.5) { medianPos = positions[i]; break; }
+        }
+    }
+    const medianEl = document.getElementById('mcMedian');
+    medianEl.textContent = medianPos === '-' ? '-' : `P${medianPos}`;
+
+    // mode
+    let modePos = '-';
+    if (positions.length > 0) {
+        let maxCount = -1;
+        for (const p of positions) {
+            const c = dist[p] || 0;
+            if (c > maxCount) { maxCount = c; modePos = p; }
+        }
+    }
+    const modeEl = document.getElementById('mcMode');
+    modeEl.textContent = modePos === '-' ? '-' : `P${modePos}`;
+
+    // Compute expected points
+    function pointsForPosition(pos) {
+        const pts = [25,18,15,12,10,8,6,4,2,1];
+        return pos >= 1 && pos <= 10 ? pts[pos-1] : 0;
+    }
+    let expectedPoints = 0;
+    for (let i = 0; i < positions.length; i++) {
+        const p = positions[i];
+        const c = dist[p] || 0;
+        expectedPoints += (c / total) * pointsForPosition(p);
+    }
+    const pointsEl = document.getElementById('mcPoints');
+    pointsEl.textContent = expectedPoints >= 0 ? expectedPoints.toFixed(2) : '-';
+
+    // Prepare chart
+    const canvas = document.getElementById('monteCarloChart');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+
+    if (window._monteChart && typeof window._monteChart.destroy === 'function') {
+        window._monteChart.destroy();
+        window._monteChart = null;
+    }
+
+    window._monteChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: positions.map(p => `P${p}`),
+            datasets: [{
+                label: 'Finish %',
+                data: percentages,
+                backgroundColor: '#667eeaCC',
+                borderColor: '#667eea',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                title: { display: true, text: `Position Distribution for ${driverNumberToSurname[driverNum] || driverNum}` }
+            },
+            scales: {
+                x: {
+                    title: { display: true, text: 'Percentage (%)' },
+                    ticks: { callback: v => v.toFixed ? v.toFixed(1) + '%' : v }
+                },
+                y: {
+                    title: { display: false },
+                    ticks: {
+                        autoSkip: false
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Populate race results table
+function populateRaceResultsTable(raceResults) {
+    const container = document.getElementById('raceResultsContainer');
+    const emptyMsg = document.getElementById('raceResultsEmpty');
+    const tbody = document.getElementById('raceResultsBody');
+
+    if (!raceResults || raceResults.length === 0) {
+        container.style.display = 'none';
+        emptyMsg.style.display = 'block';
+        return;
+    }
+
+    // Show container and hide empty message
+    container.style.display = 'block';
+    emptyMsg.style.display = 'none';
+
+    // Clear existing rows
+    tbody.innerHTML = '';
+
+    // Populate table rows
+    raceResults.forEach((result, index) => {
+        const row = document.createElement('tr');
+        
+        // Alternate row colors
+        if (index % 2 === 0) {
+            row.style.backgroundColor = '#f9f9f9';
+        }
+
+        // Position
+        const posCell = document.createElement('td');
+        posCell.textContent = result.position;
+        posCell.style.padding = '10px 12px';
+        posCell.style.border = '1px solid #ddd';
+        posCell.style.fontWeight = 'bold';
+        row.appendChild(posCell);
+
+        // Driver
+        const driverCell = document.createElement('td');
+        const driverName = driverNumberToSurname[result.driverNumber] || `Driver ${result.driverNumber}`;
+        driverCell.textContent = `${driverName} (#${result.driverNumber})`;
+        driverCell.style.padding = '10px 12px';
+        driverCell.style.border = '1px solid #ddd';
+        row.appendChild(driverCell);
+
+        // Strategy
+        const stratCell = document.createElement('td');
+        stratCell.textContent = result.strategy;
+        stratCell.style.padding = '10px 12px';
+        stratCell.style.border = '1px solid #ddd';
+        stratCell.style.fontFamily = 'monospace';
+        stratCell.style.fontWeight = 'bold';
+        row.appendChild(stratCell);
+
+        // Total Time
+        const timeCell = document.createElement('td');
+        timeCell.textContent = formatTime(result.totalTime);
+        timeCell.style.padding = '10px 12px';
+        timeCell.style.border = '1px solid #ddd';
+        timeCell.style.textAlign = 'right';
+        timeCell.style.fontFamily = 'monospace';
+        row.appendChild(timeCell);
+
+        // Delta to First
+        const deltaCell = document.createElement('td');
+        if (result.position === 1) {
+            deltaCell.textContent = '-';
+        } else {
+            deltaCell.textContent = '+' + result.deltaToFirst.toFixed(3) + 's';
+        }
+        deltaCell.style.padding = '10px 12px';
+        deltaCell.style.border = '1px solid #ddd';
+        deltaCell.style.textAlign = 'right';
+        deltaCell.style.fontFamily = 'monospace';
+        row.appendChild(deltaCell);
+
+        tbody.appendChild(row);
+    });
+}
+
+// Helper function to format time in seconds to mm:ss.sss
+function formatTime(seconds) {
+    const hours = Math.floor(seconds/3600);
+    const minutes = Math.floor((seconds-hours*3600) / 60);
+    const secs = seconds % 60;
+    return `${hours}:${minutes}:${secs.toFixed(3).padStart(6, '0')}`;
+}
+
+// Populate Monte Carlo expected standings table
+function populateStandingsTable(averagePositions) {
+    const container = document.getElementById('standingsContainer');
+    const emptyMsg = document.getElementById('standingsEmpty');
+    const tbody = document.getElementById('standingsBody');
+
+    if (!averagePositions || Object.keys(averagePositions).length === 0) {
+        container.style.display = 'none';
+        emptyMsg.style.display = 'block';
+        return;
+    }
+
+    // Show container and hide empty message
+    container.style.display = 'block';
+    emptyMsg.style.display = 'none';
+
+    // Clear existing rows
+    tbody.innerHTML = '';
+
+    // Sort drivers by expected position
+    const sortedDrivers = Object.entries(averagePositions)
+        .map(([driverNum, avgPos]) => ({ driverNum: Number(driverNum), avgPos }))
+        .sort((a, b) => a.avgPos - b.avgPos);
+
+    // Helper function to calculate expected points
+    function pointsForPosition(pos) {
+        const pts = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
+        return pos >= 1 && pos <= 10 ? pts[pos - 1] : 0;
+    }
+
+    sortedDrivers.forEach((driver, index) => {
+        const row = document.createElement('tr');
+        
+        // Alternate row colors
+        if (index % 2 === 0) {
+            row.style.backgroundColor = '#f9f9f9';
+        }
+
+        // Highlight top 3
+        if (index === 0) {
+            row.style.backgroundColor = '#ffd700'; // Gold
+            row.style.fontWeight = 'bold';
+        } else if (index === 1) {
+            row.style.backgroundColor = '#c0c0c0'; // Silver
+            row.style.fontWeight = 'bold';
+        } else if (index === 2) {
+            row.style.backgroundColor = '#cd7f32'; // Bronze
+            row.style.fontWeight = 'bold';
+        }
+
+        // Position
+        const posCell = document.createElement('td');
+        posCell.textContent = index + 1;
+        posCell.style.padding = '8px 10px';
+        posCell.style.border = '1px solid #ddd';
+        posCell.style.textAlign = 'center';
+        posCell.style.fontWeight = 'bold';
+        row.appendChild(posCell);
+
+        // Driver
+        const driverCell = document.createElement('td');
+        const driverName = driverNumberToSurname[driver.driverNum] || `Driver ${driver.driverNum}`;
+        driverCell.textContent = `${driverName} (#${driver.driverNum})`;
+        driverCell.style.padding = '8px 10px';
+        driverCell.style.border = '1px solid #ddd';
+        row.appendChild(driverCell);
+
+        // Average position
+        const avgCell = document.createElement('td');
+        avgCell.textContent = driver.avgPos.toFixed(2);
+        avgCell.style.padding = '8px 10px';
+        avgCell.style.border = '1px solid #ddd';
+        avgCell.style.textAlign = 'center';
+        avgCell.style.fontFamily = 'monospace';
+        row.appendChild(avgCell);
+
+        tbody.appendChild(row);
+    });
+}
+
+// Ensure monte dropdown updates when page loads with country/year change
+document.addEventListener('DOMContentLoaded', () => {
+    const selectYear = document.getElementById('yearSelect');
+    const selectCountry = document.getElementById('countrySelect');
+    if (selectYear) selectYear.addEventListener('change', () => { /* no-op until load */ });
+    if (selectCountry) selectCountry.addEventListener('change', () => { /* no-op until load */ });
+});

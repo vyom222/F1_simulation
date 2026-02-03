@@ -309,6 +309,40 @@
                 </div>
             </div>
             <div class="card" style="grid-column: 1 / -1;">
+                <h2>Compare Your Strategy</h2>
+                <p style="margin-bottom: 15px; color: #666; font-size: 14px;">Enter your custom strategy (max 6 stops) by choosing when to pit and which tyres to use</p>
+                <div style="margin-bottom: 15px;">
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 10px;">
+                        <div>
+                            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Number of Stops:</label>
+                            <select id="customStopsSelect" onchange="updateCustomStrategyInputs()" style="padding: 8px; border-radius: 5px; border: 1px solid #ccc; width: 100px;">
+                                <option value="1">1 Stop</option>
+                                <option value="2">2 Stops</option>
+                                <option value="3">3 Stops</option>
+                                <option value="4">4 Stops</option>
+                                <option value="5">5 Stops</option>
+                                <option value="6">6 Stops</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Starting Tyre:</label>
+                            <select id="startingTyreSelect" style="padding: 8px; border-radius: 5px; border: 1px solid #ccc; width: 120px;">
+                                <option value="SOFT">Soft</option>
+                                <option value="MEDIUM">Medium</option>
+                                <option value="HARD">Hard</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="customStintsContainer" style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 15px;"></div>
+                    <button id="compareStrategyBtn" onclick="compareCustomStrategy()" style="padding: 12px 30px; width: auto;">Compare Strategy</button>
+                    <div class="status-message" id="customStratStatus" style="display:none; margin-top:10px;"></div>
+                </div>
+                <div id="customStrategyResultContainer" style="display:none; margin-top: 20px;">
+                    <h3 style="margin-bottom: 15px; color: #667eea;">Your Strategy vs Best Strategy</h3>
+                    <div id="customStrategyResult" style="display:flex; flex-direction:column; gap:15px;"></div>
+                </div>
+            </div>
+            <div class="card" style="grid-column: 1 / -1;">
                 <h2>Qualifying Simulation</h2>
                 <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
                     <button id="loadQualifyingBtn" onclick="loadQuali()" style="padding: 12px 20px; width: auto; margin-left: auto;">Load Qualifying Data</button>

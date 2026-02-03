@@ -180,6 +180,8 @@ function loadTyreCurves() {
             if (data.success && data.curves && data.curves.length > 0) {
                 console.log('Curves count:', data.curves.length);
                 console.log('First curve:', data.curves[0]);
+                // Cache the tyre curves globally
+                globalTyreCurves = data.curves;
                 plotTyreCurves(data.curves);
                 showStatus('Tyre curves loaded successfully', 'success');
             } else if (data.error) {
@@ -395,6 +397,11 @@ async function loadStrats(){
         container.innerHTML = '';
 
         const raceLength = data.strategies.length > 0 && data.strategies[0].stints ? data.strategies[0].stints.reduce((acc, s) => acc + s.length, 0) : 66;
+
+        // Cache the best strategy globally
+        if (data.strategies.length > 0) {
+            globalBestStrategy = data.strategies[0];
+        }
 
         data.strategies.forEach((s, idx) => {
             const row = document.createElement('div');
@@ -1132,10 +1139,387 @@ function populateStandingsTable(averagePositions) {
     });
 }
 
+
+let globalTyreCurves = null;
+let globalBestStrategy = null;
+const PIT_STOP_TIME = 20; // Pit loss
+
+// Update custom strategy inputs based on number of stops
+function updateCustomStrategyInputs() {
+    const numStops = parseInt(document.getElementById('customStopsSelect').value);
+    const container = document.getElementById('customStintsContainer');
+    container.innerHTML = '';
+    
+    for (let i = 0; i < numStops; i++) {
+        const pitDiv = document.createElement('div');
+        pitDiv.style.cssText = 'display: flex; flex-direction: column; gap: 5px;';
+        
+        const pitLabel = document.createElement('label');
+        pitLabel.textContent = `Pit Stop ${i + 1}`;
+        pitLabel.style.fontWeight = 'bold';
+        pitLabel.style.fontSize = '14px';
+        
+        const lapInput = document.createElement('input');
+        lapInput.type = 'number';
+        lapInput.id = `pitLap${i}`;
+        lapInput.min = '1';
+        lapInput.max = '70';
+        lapInput.placeholder = 'Lap #';
+        lapInput.style.cssText = 'padding: 8px; border-radius: 5px; border: 1px solid #ccc; width: 80px;';
+        
+        const tyreSelect = document.createElement('select');
+        tyreSelect.id = `pitTyre${i}`;
+        tyreSelect.style.cssText = 'padding: 8px; border-radius: 5px; border: 1px solid #ccc;';
+        tyreSelect.innerHTML = `
+            <option value="SOFT">Soft</option>
+            <option value="MEDIUM">Medium</option>
+            <option value="HARD">Hard</option>
+        `;
+        
+        const helper = document.createElement('small');
+        helper.textContent = 'Change to:';
+        helper.style.color = '#666';
+        
+        pitDiv.appendChild(pitLabel);
+        pitDiv.appendChild(lapInput);
+        pitDiv.appendChild(helper);
+        pitDiv.appendChild(tyreSelect);
+        
+        container.appendChild(pitDiv);
+    }
+}
+
+// Calculate lap time for a given compound and lap number within stint
+function calculateLapTime(compound, lapInStint, tyreCurves) {
+    if (!tyreCurves) return null;
+    
+    const curve = tyreCurves.find(c => c.compound.toUpperCase() === compound.toUpperCase());
+    if (!curve) return null;
+    
+    return curve.slope * lapInStint + curve.intercept;
+}
+
+// Calculate total time for a strategy
+function calculateStrategyTime(stints, tyreCurves) {
+    let totalTime = 0;
+    let lapCount = 0;
+    
+    for (let stintIdx = 0; stintIdx < stints.length; stintIdx++) {
+        const stint = stints[stintIdx];
+        const compound = stint.compound;
+        const laps = stint.laps;
+
+        for (let lap = 0; lap < laps; lap++) {
+            const lapTime = calculateLapTime(compound, lap, tyreCurves);
+            if (lapTime === null) return null;
+            totalTime += lapTime;
+            lapCount++;
+        }
+        
+        // Add pit loss (except for last stint)
+        if (stintIdx < stints.length - 1) {
+            totalTime += PIT_STOP_TIME;
+        }
+    }
+    
+    return { totalTime, lapCount };
+}
+
+// Compare custom strategy
+async function compareCustomStrategy() {
+    const status = document.getElementById('customStratStatus');
+    const button = document.getElementById('compareStrategyBtn');
+    const resultContainer = document.getElementById('customStrategyResultContainer');
+    const resultDiv = document.getElementById('customStrategyResult');
+    
+    const country = document.getElementById('countrySelect').value;
+    const year = document.getElementById('yearSelect').value;
+    
+    if (!country || !year) {
+        status.textContent = 'Please select country and year first';
+        status.className = 'status-message status-error';
+        status.style.display = 'block';
+        return;
+    }
+    
+    // Fetch best strategy to get race length
+    if (!globalBestStrategy) {
+        status.textContent = 'Please load top strategies first';
+        status.className = 'status-message status-error';
+        status.style.display = 'block';
+        return;
+    }
+    
+    const raceLength = globalBestStrategy.stints.reduce((acc, s) => acc + s.length, 0);
+    
+    // Collect pit stops and build stints
+    const numStops = parseInt(document.getElementById('customStopsSelect').value);
+    const startingTyre = document.getElementById('startingTyreSelect').value;
+    const pitLaps = [];
+    const pitTyres = [];
+    
+    for (let i = 0; i < numStops; i++) {
+        const lap = parseInt(document.getElementById(`pitLap${i}`).value);
+        const tyre = document.getElementById(`pitTyre${i}`).value;
+        
+        if (!lap || lap <= 0 || lap >= raceLength) {
+            status.textContent = `Please enter valid pit lap for Pit Stop ${i + 1} (between 1 and ${raceLength - 1})`;
+            status.className = 'status-message status-error';
+            status.style.display = 'block';
+            return;
+        }
+        
+        pitLaps.push(lap);
+        pitTyres.push(tyre);
+    }
+    
+    // Check pit laps are in ascending order
+    for (let i = 1; i < pitLaps.length; i++) {
+        if (pitLaps[i] <= pitLaps[i - 1]) {
+            status.textContent = 'Pit laps must be in ascending order';
+            status.className = 'status-message status-error';
+            status.style.display = 'block';
+            return;
+        }
+    }
+    
+    // Build stints from pit stops
+    const stints = [];
+    let currentLap = 0;
+    let currentTyre = startingTyre;
+    
+    for (let i = 0; i < numStops; i++) {
+        const pitLap = pitLaps[i];
+        const stintLength = pitLap - currentLap;
+        stints.push({ compound: currentTyre, laps: stintLength });
+        currentLap = pitLap;
+        currentTyre = pitTyres[i];
+    }
+    
+    // Final stint to end of race
+    const finalStintLength = raceLength - currentLap;
+    stints.push({ compound: currentTyre, laps: finalStintLength });
+    
+    button.disabled = true;
+    status.textContent = 'Calculating...';
+    status.className = 'status-message status-loading';
+    status.style.display = 'block';
+    
+    try {
+        // Fetch tyre curves if not already loaded
+        if (!globalTyreCurves) {
+            const curvesUrl = `http://localhost:5000/api/solver/tyre-curves?country=${country}&year=${year}`;
+            const curvesResp = await fetch(curvesUrl);
+            const curvesData = await curvesResp.json();
+            
+            if (!curvesData.success || !curvesData.curves) {
+                throw new Error('Failed to load tyre curves');
+            }
+            
+            globalTyreCurves = curvesData.curves;
+        }
+        
+        // Fetch best strategy if not already loaded
+        if (!globalBestStrategy) {
+            const stratsUrl = `http://localhost:5000/api/solver/top-strategies?country=${country}&year=${year}`;
+            const stratsResp = await fetch(stratsUrl);
+            const stratsData = await stratsResp.json();
+            
+            if (!stratsData.success || !stratsData.strategies || stratsData.strategies.length === 0) {
+                throw new Error('Failed to load top strategies');
+            }
+            
+            globalBestStrategy = stratsData.strategies[0];
+        }
+        
+        // Calculate custom strategy time
+        const customResult = calculateStrategyTime(stints, globalTyreCurves);
+        if (!customResult) {
+            throw new Error('Failed to calculate custom strategy time');
+        }
+        
+        // Calculate best strategy time
+        const bestStints = globalBestStrategy.stints.map(s => ({
+            compound: s.compound,
+            laps: s.length
+        }));
+        const bestResult = calculateStrategyTime(bestStints, globalTyreCurves);
+        if (!bestResult) {
+            throw new Error('Failed to calculate best strategy time');
+        }
+        
+        // Calculate delta
+        const delta = customResult.totalTime - bestResult.totalTime;
+        
+        resultDiv.innerHTML = '';
+        
+        // Calculate pit laps for best strategy
+        const bestPitLaps = [];
+        let lapCounter = 0;
+        for (let i = 0; i < globalBestStrategy.stints.length - 1; i++) {
+            lapCounter += globalBestStrategy.stints[i].length;
+            bestPitLaps.push(lapCounter);
+        }
+        
+        // Best strategy display
+        const bestRow = createStrategyDisplayRow(
+            'Best Strategy',
+            bestStints,
+            bestResult.totalTime,
+            0,
+            bestResult.lapCount,
+            bestPitLaps
+        );
+        resultDiv.appendChild(bestRow);
+        
+        // Custom strategy display
+        const customRow = createStrategyDisplayRow(
+            'Your Strategy',
+            stints,
+            customResult.totalTime,
+            delta,
+            customResult.lapCount,
+            pitLaps
+        );
+        resultDiv.appendChild(customRow);
+        
+        // Check if strategy uses only one compound
+        const uniqueCompounds = new Set(stints.map(s => s.compound.toUpperCase()));
+        const isIllegal = uniqueCompounds.size < 2;
+        
+        let statusText = '';
+        if (isIllegal) {
+            statusText = delta > 0 
+                ? `Your strategy is ${delta.toFixed(3)}s slower (Illegal strategy - must use at least 2 different compounds)` 
+                : delta < 0 
+                ? `Your strategy is ${Math.abs(delta).toFixed(3)}s faster! (Illegal strategy - must use at least 2 different compounds)` 
+                : 'Your strategy matches the best time! (Illegal strategy - must use at least 2 different compounds)';
+        } else {
+            statusText = delta > 0 
+                ? `Your strategy is ${delta.toFixed(3)}s slower` 
+                : delta < 0 
+                ? `Your strategy is ${Math.abs(delta).toFixed(3)}s faster!` 
+                : 'Your strategy matches the best time!';
+        }
+        
+        status.textContent = statusText;
+        status.className = (delta > 0 || isIllegal) ? 'status-message status-error' : 'status-message status-success';
+        status.style.display = 'block';
+        resultContainer.style.display = 'block';
+        
+    } catch (error) {
+        status.textContent = 'Error: ' + error.message;
+        status.className = 'status-message status-error';
+        status.style.display = 'block';
+        console.error('Error comparing strategy:', error);
+    } finally {
+        button.disabled = false;
+    }
+}
+
+// Create strategy display row with colored bars
+function createStrategyDisplayRow(label, stints, totalTime, delta, totalLaps, pitLaps) {
+    const rowDiv = document.createElement('div');
+    rowDiv.style.cssText = 'background: #f9f9f9; padding: 15px; border-radius: 8px; border: 2px solid #ddd;';
+    
+    // Header with label and time info
+    const headerDiv = document.createElement('div');
+    headerDiv.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;';
+    
+    const labelSpan = document.createElement('span');
+    labelSpan.textContent = label;
+    labelSpan.style.cssText = 'font-weight: bold; font-size: 16px;';
+    
+    const timeDiv = document.createElement('div');
+    timeDiv.style.cssText = 'display: flex; gap: 15px; align-items: center;';
+    
+    const totalTimeSpan = document.createElement('span');
+    totalTimeSpan.textContent = `Total: ${formatTime(totalTime)}`;
+    totalTimeSpan.style.cssText = 'font-weight: bold;';
+    
+    timeDiv.appendChild(totalTimeSpan);
+    
+    if (delta !== 0) {
+        const deltaSpan = document.createElement('span');
+        deltaSpan.textContent = delta > 0 ? `+${delta.toFixed(3)}s` : `${delta.toFixed(3)}s`;
+        deltaSpan.style.cssText = `font-weight: bold; color: ${delta > 0 ? '#d9534f' : '#5cb85c'};`;
+        timeDiv.appendChild(deltaSpan);
+    }
+    
+    headerDiv.appendChild(labelSpan);
+    headerDiv.appendChild(timeDiv);
+    rowDiv.appendChild(headerDiv);
+    
+    // Strategy bar
+    const barWrapper = document.createElement('div');
+    barWrapper.className = 'strategy-bar-wrapper';
+    barWrapper.style.cssText = 'position: relative; width: 100%; height: 35px; background: #f3f3f3; border-radius: 6px; overflow: hidden; border: 1px solid #ddd;';
+    
+    // Add lap ticks
+    const ticks = document.createElement('div');
+    ticks.className = 'lap-ticks';
+    const tickInterval = Math.max(1, Math.ceil(totalLaps / 6));
+    for (let lap = 1; lap <= totalLaps; lap += tickInterval) {
+        const tick = document.createElement('span');
+        tick.className = 'lap-tick';
+        const leftPct = ((lap - 1) / totalLaps) * 100;
+        tick.style.left = leftPct + '%';
+        tick.textContent = lap;
+        ticks.appendChild(tick);
+    }
+    barWrapper.appendChild(ticks);
+    
+    // Add stint segments
+    stints.forEach(stint => {
+        const seg = document.createElement('div');
+        seg.className = 'stint-segment';
+        const pct = (stint.laps / totalLaps) * 100;
+        seg.style.width = pct + '%';
+        seg.style.height = '100%';
+        seg.style.display = 'inline-block';
+        seg.style.boxSizing = 'border-box';
+        
+        const compoundUpper = stint.compound.toUpperCase();
+        seg.style.backgroundColor = compoundUpper.includes('SOFT') ? '#FF0000'
+            : compoundUpper.includes('MEDIUM') ? '#FFFF00' : '#888888';
+        seg.title = `${stint.compound} (${stint.laps} laps)`;
+        
+        barWrapper.appendChild(seg);
+    });
+    
+    // Add black pit stop lines
+    if (pitLaps && pitLaps.length > 0) {
+        pitLaps.forEach(pitLap => {
+            const line = document.createElement('div');
+            line.style.cssText = 'position: absolute; top: 0; height: 100%; width: 3px; background-color: #000; z-index: 20;';
+            const leftPct = (pitLap / totalLaps) * 100;
+            line.style.left = leftPct + '%';
+            line.title = `Pit on lap ${pitLap}`;
+            barWrapper.appendChild(line);
+        });
+    }
+    
+    rowDiv.appendChild(barWrapper);
+    
+    // Strategy details
+    const detailsDiv = document.createElement('div');
+    detailsDiv.style.cssText = 'margin-top: 10px; font-size: 13px; color: #666;';
+    const strategyText = stints.map(s => `${s.compound} (${s.laps}L)`).join(' → ');
+    detailsDiv.textContent = `Strategy: ${strategyText}`;
+    rowDiv.appendChild(detailsDiv);
+    
+    return rowDiv;
+}
+
 // Ensure monte dropdown updates when page loads with country/year change
 document.addEventListener('DOMContentLoaded', () => {
     const selectYear = document.getElementById('yearSelect');
     const selectCountry = document.getElementById('countrySelect');
     if (selectYear) selectYear.addEventListener('change', () => { /* no-op until load */ });
     if (selectCountry) selectCountry.addEventListener('change', () => { /* no-op until load */ });
+    
+    // Initialize custom strategy inputs
+    if (typeof updateCustomStrategyInputs === 'function') {
+        updateCustomStrategyInputs();
+    }
 });

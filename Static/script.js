@@ -87,7 +87,7 @@ const driverNumberToTeamByYear = {
     }
 };
 
-// Check C# API status on page load
+// Run everything on page load
 window.addEventListener('load', function() {
     // Check C# API health
     fetch('http://localhost:5000/api/solver/health')
@@ -106,47 +106,21 @@ window.addEventListener('load', function() {
     // Load curves on page load
     setTimeout(() => {
         loadTyreCurves();
+        loadStrats();
+        loadQuali();
+        loadRacePace();
+        loadRaceSimulation();
+        loadMonteCarlo();
     }, 1000);
 });
 
-function runCSharp() {
-    const button = document.getElementById('runButton');
-    const status = document.getElementById('csharpStatus');
-    const output = document.getElementById('output');
-
-    // Disable button and show loading
-    button.disabled = true;
-    status.textContent = 'Running F1 Simulation Solver...';
-    status.className = 'status-message status-loading';
-    status.style.display = 'block';
-    output.style.display = 'none';
-
-    fetch('http://localhost:5000/api/solver/run-solver?country=Spain&year=2024')
-        .then(response => response.json())
-        .then(data => {
-            // Update status
-            if (data.success) {
-                status.textContent = 'Simulation completed successfully';
-                status.className = 'status-message status-success';
-            } else {
-                status.textContent = 'Simulation encountered errors';
-                status.className = 'status-message status-error';
-            }
-
-            // Display output
-            output.textContent = data.output || 'No output';
-            output.style.display = 'block';
-
-            // Re-enable button
-            button.disabled = false;
-        })
-        .catch(error => {
-            status.textContent = 'Error: ' + error;
-            status.className = 'status-message status-error';
-            output.textContent = 'Failed to connect to C# API. Make sure to run: dotnet run';
-            output.style.display = 'block';
-            button.disabled = false;
-        });
+function runAll() {
+    loadTyreCurves();
+    loadStrats();
+    loadQuali();
+    loadRacePace();
+    loadRaceSimulation();
+    loadMonteCarlo();
 }
 
 function loadTyreCurves() {
@@ -812,7 +786,7 @@ async function loadRaceSimulation() {
 async function loadMonteCarlo() {
     const country = document.getElementById('countrySelect').value;
     const year = document.getElementById('yearSelect').value;
-    const sims = Number(document.getElementById('mcSims').value) || 1000;
+    const sims = Number(document.getElementById('mcSims').value) || 500;
     const status = document.getElementById('monteStatus');
     const btn = document.getElementById('loadMonteBtn');
 

@@ -214,7 +214,7 @@ namespace F1_simulation.Core.Race_simulator
 
             for (int lap = 1; lap <= raceLength; lap++)
             {
-                Console.WriteLine($"\n=== LAP {lap} ===");
+                // Console.WriteLine($"\n=== LAP {lap} ===");
 
                 // Enable DRS from lap 2 onwards
                 currentDrivers = currentDrivers.Select(d => d with { HasDRS = lap >= 2 }).ToList();
@@ -299,12 +299,12 @@ namespace F1_simulation.Core.Race_simulator
 
                 lapByLapPositions.Add(new List<DriverState>(currentDrivers));
 
-                // Print lap summary
-                Console.WriteLine("Positions after lap:");
-                foreach (var driver in currentDrivers.Take(5))
-                {
-                    Console.WriteLine($"P{driver.Position}: Driver {driver.DriverNumber} ({driver.TotalTime:F1}s, {driver.CurrentTyre})");
-                }
+                // // Print lap summary
+                // Console.WriteLine("Positions after lap:");
+                // foreach (var driver in currentDrivers.Take(5))
+                // {
+                //     Console.WriteLine($"P{driver.Position}: Driver {driver.DriverNumber} ({driver.TotalTime:F1}s, {driver.CurrentTyre})");
+                // }
             }
 
             return new RaceSimulationResult

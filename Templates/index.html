@@ -234,10 +234,27 @@
                 </div>
             </div>
 
-            <!-- C# Runner Card -->
+            <!-- Year and country select card -->
             <div class="card">
-                <h2>C# Application</h2>
-                <button id="runButton" onclick="runCSharp()">Run C# Script</button>
+                <h2>Country and Year Select</h2>
+                <div style="margin-bottom: 15px; display: flex; justify-content: left; align-items: left; gap: 20px; flex-wrap: wrap;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <label for="countrySelect" style="margin-right: 5px;">Country:</label>
+                        <select id="countrySelect" style="padding: 8px; border-radius: 5px; border: 1px solid #ccc;">
+                            <option value="Spain">Spain</option>
+                            <option value="Hungary">Hungary</option>
+                            <option value="Japan">Japan</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <label for="yearSelect" style="margin-right: 5px;">Year:</label>
+                        <select id="yearSelect" style="padding: 8px; border-radius: 5px; border: 1px solid #ccc;">
+                            <option value="2024">2024</option>
+                            <option value="2025">2025</option>
+                        </select>
+                    </div>
+                </div>
+                <button id="runButton" onclick="runAll()">Update All</button>
                 <div class="status-message" id="csharpStatus" style="display: none;"></div>
                 <div class="output" id="output" style="display: none;"></div>
             </div>
@@ -246,21 +263,6 @@
             <div class="card" style="grid-column: 1 / -1;">
                 <h2>Tyre Degradation Curves</h2>
                 <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-                    <div>
-                        <label for="countrySelect" style="margin-right: 5px;">Country:</label>
-                        <select id="countrySelect" style="padding: 8px; border-radius: 5px; border: 1px solid #ccc;">
-                            <option value="Spain">Spain</option>
-                            <option value="Hungary">Hungary</option>
-                            <option value="Japan">Japan</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label for="yearSelect" style="margin-right: 5px;">Year:</label>
-                        <select id="yearSelect" style="padding: 8px; border-radius: 5px; border: 1px solid #ccc;">
-                            <option value="2024">2024</option>
-                            <option value="2025">2025</option>
-                        </select>
-                    </div>
                     <button id="loadCurvesBtn" onclick="loadTyreCurves()" style="padding: 12px 20px; width: auto; margin-left: auto;">Load Curves</button>
                 </div>
                 <div class="status-message" id="curveStatus" style="display: none;"></div>
@@ -371,7 +373,7 @@
                     </div>
                     <div>
                         <label for="mcSims" style="margin-right: 5px;">Simulations:</label>
-                        <input id="mcSims" type="number" value="1000" style="width:100px; padding:8px; border-radius:5px; border:1px solid #ccc;" />
+                        <input id="mcSims" type="number" value="500" style="width:100px; padding:8px; border-radius:5px; border:1px solid #ccc;" />
                     </div>
                     <button id="loadMonteBtn" onclick="loadMonteCarlo()" style="padding: 12px 20px; width: auto; margin-left: auto;">Load Monte Carlo</button>
                     <div class="status-message" id="monteStatus" style="display:none; margin-left:10px;"></div>

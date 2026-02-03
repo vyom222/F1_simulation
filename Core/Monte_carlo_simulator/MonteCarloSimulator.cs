@@ -15,12 +15,16 @@ namespace F1_simulation.Core.Monte_carlo_simulator
         private readonly double _safetyCarProbability;
         private readonly int _minSafetyCarLap;
         private readonly int _maxSafetyCarLap;
+        private readonly double _firstLapChaosStdDev;
+        private readonly double _overtakeProbabilityBase;
 
         public MonteCarloSimulator(
             double gaussianNoiseStdDev = 0.3,
             double safetyCarProbability = 0.3,
             int minSafetyCarLap = 5,
             int maxSafetyCarLap = 60,
+            double firstLapChaosStdDev = 2.0,
+            double overtakeProbabilityBase = 0.3,
             Random? random = null)
         {
             _random = random ?? new Random();
@@ -28,6 +32,8 @@ namespace F1_simulation.Core.Monte_carlo_simulator
             _safetyCarProbability = safetyCarProbability;
             _minSafetyCarLap = minSafetyCarLap;
             _maxSafetyCarLap = maxSafetyCarLap;
+            _firstLapChaosStdDev = firstLapChaosStdDev;
+            _overtakeProbabilityBase = overtakeProbabilityBase;
         }
 
         // Runs multiple Monte Carlo simulations and returns average positions
@@ -169,22 +175,17 @@ namespace F1_simulation.Core.Monte_carlo_simulator
             double trafficPenalty,
             MonteCarloSolver monteCarloSolver)
         {
-            // Initialize drivers with random strategies
+            // Initialize drivers with optimal starting tyres
             var drivers = new List<RaceSimulator.DriverState>();
             var driverStrategies = new Dictionary<int, OptimalStrategy.StrategyWithWindows>();
-            var driverPitPlans = new Dictionary<int, List<(int lap, TyreType pitTo)>>();
 
             foreach (var driverNum in driverNumbers)
             {
-                // Select random strategy for this driver
+                // Select random strategy for initial starting tyre only
                 var strategy = monteCarloSolver.SelectRandomStrategy();
                 driverStrategies[driverNum] = strategy;
 
-                // Randomize pit windows
-                var pitPlan = monteCarloSolver.RandomizePitWindows(strategy, raceLength);
-                driverPitPlans[driverNum] = pitPlan;
-
-                // Get starting tyre
+                // Get starting tyre from the strategy
                 var startingTyre = monteCarloSolver.GetStartingTyre(strategy);
 
                 drivers.Add(new RaceSimulator.DriverState
@@ -227,15 +228,13 @@ namespace F1_simulation.Core.Monte_carlo_simulator
             var raceResult = await SimulateRaceLapByLap(
                 drivers,
                 driverStrategies,
-                driverPitPlans,
                 tyresDict,
                 raceLength,
                 pitLoss,
                 trafficPenalty,
                 safetyCarLaps,
                 optimalStrategy,
-                raceSolver,
-                monteCarloSolver);
+                raceSolver);
 
             var raceInfo = new RaceInfo
             {
@@ -251,15 +250,13 @@ namespace F1_simulation.Core.Monte_carlo_simulator
         private async Task<RaceSimulator.RaceSimulationResult> SimulateRaceLapByLap(
             List<RaceSimulator.DriverState> drivers,
             Dictionary<int, OptimalStrategy.StrategyWithWindows> driverStrategies,
-            Dictionary<int, List<(int lap, TyreType pitTo)>> driverPitPlans,
             Dictionary<TyreType, Tyre> tyres,
             int raceLength,
             double pitLoss,
             double trafficPenalty,
             HashSet<int> safetyCarLaps,
             OptimalStrategy optimalStrategy,
-            RaceSolver raceSolver,
-            MonteCarloSolver monteCarloSolver)
+            RaceSolver raceSolver)
         {
             var lapByLapPositions = new List<List<RaceSimulator.DriverState>>();
             var pitStops = new Dictionary<int, List<(int lap, TyreType pitTo)>>();
@@ -314,39 +311,47 @@ namespace F1_simulation.Core.Monte_carlo_simulator
                         baseLapTime = baseLapTime * 1.5; 
                     }
 
-                    // Determine pit decision
+                    // Determine pit decision using dynamic optimization
+                    // Always use RaceSolver to make optimal decisions based on current race state
                     bool shouldPit = false;
                     TyreType? pitTo = null;
 
-                    if (safetyCarActive)
-                    {
-                        // During safety car, recalculate strategy using horizon method
-                        var pitDecision = raceSolver.Decide(
-                            absoluteLap: lap,
-                            raceLength: raceLength,
-                            tyre: driverCopy.CurrentTyre,
-                            tyreAge: driverCopy.TyreAge,
-                            usedTyres: driverCopy.UsedTyres,
-                            trafficPenaltyThisLap: 0.0,
-                            fuelRemaining: driverCopy.FuelRemaining
-                        );
+                    var pitDecision = raceSolver.Decide(
+                        absoluteLap: lap,
+                        raceLength: raceLength,
+                        tyre: driverCopy.CurrentTyre,
+                        tyreAge: driverCopy.TyreAge,
+                        usedTyres: driverCopy.UsedTyres,
+                        trafficPenaltyThisLap: trafficLoss,
+                        fuelRemaining: driverCopy.FuelRemaining
+                    );
 
-                        if (pitDecision.action == StrategyAction.Pit && pitDecision.pitTo.HasValue)
-                        {
-                            shouldPit = true;
-                            pitTo = pitDecision.pitTo.Value;
-                        }
-                    }
-                    else
+                    // Add stochastic element: drivers sometimes pit earlier/later than optimal
+                    // This creates strategy variance across simulations
+                    if (pitDecision.action == StrategyAction.Pit && pitDecision.pitTo.HasValue)
                     {
-                        // Normal race: follow randomized strategy
-                        if (driverPitPlans.TryGetValue(driver.DriverNumber, out var pitPlan))
+                        // 70% chance to follow optimal strategy exactly
+                        // 30% chance to deviate by waiting 1-2 more laps
+                        double randomChoice = _random.NextDouble();
+                        
+                        if (randomChoice > 0.7 && driverCopy.TyreAge < 25) // Don't delay if tyres are very old
                         {
-                            if (monteCarloSolver.ShouldPitThisLap(lap, pitPlan, driverCopy.CurrentTyre, driverCopy.TyreAge))
+                            // Delay pit stop by 1-2 laps
+                            int delay = _random.Next(1, 3);
+
+                            // Use driver number as a hash to create consistency within a driver's race
+                            int pitThreshold = (driver.DriverNumber + lap) % delay;
+                            if (pitThreshold == 0)
                             {
                                 shouldPit = true;
-                                pitTo = monteCarloSolver.GetNextPitTyre(lap, pitPlan);
+                                pitTo = pitDecision.pitTo.Value;
                             }
+                        }
+                        else
+                        {
+                            // Follow optimal strategy
+                            shouldPit = true;
+                            pitTo = pitDecision.pitTo.Value;
                         }
                     }
 
@@ -382,11 +387,21 @@ namespace F1_simulation.Core.Monte_carlo_simulator
                     lapTimes.Add((driverCopy, baseLapTime));
                 }
 
-                // Sort by total time to determine positions
-                currentDrivers = lapTimes
-                    .OrderBy(x => x.driver.TotalTime)
-                    .Select((x, index) => x.driver with { Position = index + 1 })
-                    .ToList();
+                // Apply first lap chaos for lap 1
+                if (lap == 1)
+                {
+                    currentDrivers = ApplyFirstLapChaos(lapTimes.Select(lt => lt.driver).ToList());
+                }
+                else if (safetyCarActive)
+                {
+                    // During safety car: bunch up all cars by neutralizing gaps
+                    currentDrivers = BunchUpCarsUnderSafetyCar(lapTimes);
+                }
+                else
+                {
+                    // Apply overtaking logic based on pace differential and randomness
+                    currentDrivers = SimulateOvertakes(lapTimes, currentDrivers);
+                }
 
                 lapByLapPositions.Add(new List<RaceSimulator.DriverState>(currentDrivers));
             }
@@ -466,6 +481,165 @@ namespace F1_simulation.Core.Monte_carlo_simulator
             double u2 = 1.0 - random.NextDouble();
             double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
             return mean + stdDev * randStdNormal;
+        }
+
+        // Bunches up cars under safety car by neutralizing gaps
+        private List<RaceSimulator.DriverState> BunchUpCarsUnderSafetyCar(
+            List<(RaceSimulator.DriverState driver, double lapTime)> lapTimes)
+        {
+            // Sort by current total time to maintain race order
+            var sortedDrivers = lapTimes.OrderBy(x => x.driver.TotalTime).ToList();
+            
+            if (sortedDrivers.Count == 0) return new List<RaceSimulator.DriverState>();
+            
+            // Leader's time is the reference
+            double leaderTime = sortedDrivers[0].driver.TotalTime;
+            
+            var result = new List<RaceSimulator.DriverState>();
+            
+            for (int i = 0; i < sortedDrivers.Count; i++)
+            {
+                var driver = sortedDrivers[i].driver;
+                
+                if (i == 0)
+                {
+                    // Leader maintains their time
+                    result.Add(driver with { Position = 1 });
+                }
+                else
+                {
+                    // All other cars are bunched up ~1 second behind each other
+                    // Small random variation (0.5-1.5 seconds) to simulate bunching
+                    double gapToCarAhead = 0.5 + (_random.NextDouble() * 1.0);
+                    double newTotalTime = leaderTime + (i * gapToCarAhead);
+                    
+                    // Update driver with neutralized gap
+                    result.Add(driver with 
+                    { 
+                        Position = i + 1,
+                        TotalTime = newTotalTime
+                    });
+                }
+            }
+            
+            return result;
+        }
+
+        // Simulates first lap chaos with random position changes
+        private List<RaceSimulator.DriverState> ApplyFirstLapChaos(List<RaceSimulator.DriverState> drivers)
+        {
+            var positions = drivers.OrderBy(d => d.TotalTime).ToList();
+            
+            // Each driver gets a random position delta based on Gaussian distribution
+            var positionDeltas = new Dictionary<int, int>();
+            
+            foreach (var driver in positions)
+            {
+                // Sample from Gaussian - larger std dev for first lap
+                double delta = SampleGaussian(_random, 0.0, _firstLapChaosStdDev);
+                positionDeltas[driver.DriverNumber] = (int)Math.Round(delta);
+            }
+            
+            // Apply deltas while keeping positions in valid range
+            var newPositions = new List<(RaceSimulator.DriverState driver, int targetPosition)>();
+            
+            for (int i = 0; i < positions.Count; i++)
+            {
+                var driver = positions[i];
+                int currentPos = i + 1;
+                int delta = positionDeltas[driver.DriverNumber];
+                int targetPos = Math.Clamp(currentPos + delta, 1, positions.Count);
+                
+                newPositions.Add((driver, targetPos));
+            }
+            
+            // Sort by target position and resolve conflicts
+            var sortedByTarget = newPositions.OrderBy(x => x.targetPosition).ThenBy(x => x.driver.TotalTime).ToList();
+            
+            var result = new List<RaceSimulator.DriverState>();
+            for (int i = 0; i < sortedByTarget.Count; i++)
+            {
+                var driver = sortedByTarget[i].driver;
+                int positionsGained = driver.Position - (i + 1);
+                
+                // Adjust time slightly based on position change to maintain consistency
+                // (gaining positions = slightly better lap, losing = slightly worse)
+                double timeAdjustment = positionsGained * -0.1;
+                
+                result.Add(driver with 
+                { 
+                    Position = i + 1,
+                    TotalTime = driver.TotalTime + timeAdjustment
+                });
+            }
+            
+            return result;
+        }
+
+        private List<RaceSimulator.DriverState> SimulateOvertakes(
+            List<(RaceSimulator.DriverState driver, double lapTime)> lapTimes,
+            List<RaceSimulator.DriverState> previousPositions)
+        {
+            var driversByTime = lapTimes.OrderBy(x => x.driver.TotalTime).ToList();
+            var result = new List<RaceSimulator.DriverState>();
+            
+            // Convert to linked list for easy position swapping
+            var positions = new LinkedList<RaceSimulator.DriverState>();
+            foreach (var (driver, _) in driversByTime)
+            {
+                positions.AddLast(driver);
+            }
+            
+            // Process each adjacent pair for potential overtakes
+            var current = positions.First;
+            while (current != null && current.Next != null)
+            {
+                var ahead = current.Value;
+                var behind = current.Next.Value;
+                
+                // Find their lap times
+                double aheadLapTime = lapTimes.First(x => x.driver.DriverNumber == ahead.DriverNumber).lapTime;
+                double behindLapTime = lapTimes.First(x => x.driver.DriverNumber == behind.DriverNumber).lapTime;
+                
+                // Calculate pace differential (how much faster the car behind is)
+                double paceDifferential = aheadLapTime - behindLapTime;
+                
+                // Calculate overtake probability based on pace differential
+                double overtakeProbability = 0.0;
+                
+                if (paceDifferential > 0.3)  // Behind car is significantly faster
+                {
+                    // Higher pace differential = higher overtake chance
+                    overtakeProbability = Math.Min(0.8, _overtakeProbabilityBase + (paceDifferential * 0.1));
+                }
+                
+                // Random element - sometimes overtakes happen, sometimes they don't
+                if (paceDifferential > 0.1 && _random.NextDouble() < overtakeProbability)
+                {
+                    // Swap positions
+                    var temp = current.Value;
+                    current.Value = current.Next.Value;
+                    current.Next.Value = temp;
+                    
+                    // Add small time penalty to the overtaken car (defending)
+                    current.Next.Value = current.Next.Value with 
+                    { 
+                        TotalTime = current.Next.Value.TotalTime + 0.2 
+                    };
+                }
+                
+                current = current.Next;
+            }
+            
+            // Convert back to list with updated positions
+            int pos = 1;
+            foreach (var driver in positions)
+            {
+                result.Add(driver with { Position = pos });
+                pos++;
+            }
+            
+            return result;
         }
     }
 

@@ -145,15 +145,15 @@ namespace F1_simulation
             Console.WriteLine("Pos\tDriver\tTotal Time\tPit Stops");
             Console.WriteLine("---\t------\t----------\t----------");
 
-            foreach (var driver in raceResult.FinalPositions)
+            foreach (var driver in raceResult.FinalPositions!)
             {
-                var pitCount = raceResult.PitStops.GetValueOrDefault(driver.DriverNumber, new List<(int, TyreType)>()).Count;
+                var pitCount = raceResult.PitStops!.GetValueOrDefault(driver.DriverNumber, new List<(int, TyreType)>()).Count;
                 Console.WriteLine($"{driver.Position}\t{driver.DriverNumber}\t{driver.TotalTime:F1}s\t\t{pitCount}");
             }
 
             // Show winning driver's strategy
             var winner = raceResult.FinalPositions.First();
-            var winnerPitStops = raceResult.PitStops.GetValueOrDefault(winner.DriverNumber, new List<(int, TyreType)>());
+            var winnerPitStops = raceResult.PitStops!.GetValueOrDefault(winner.DriverNumber, new List<(int, TyreType)>());
 
             Console.WriteLine("\n=== WINNING DRIVER STRATEGY ===");
             Console.WriteLine($"Driver {winner.DriverNumber} - Champion!");
@@ -190,10 +190,12 @@ namespace F1_simulation
             Console.WriteLine("Running Monte Carlo simulation with randomized strategies...");
             
             var monteCarloSimulator = new MonteCarloSimulator(
-                gaussianNoiseStdDev: 0.3,
+                gaussianNoiseStdDev: 0.5,           // Increased lap-to-lap variance
                 safetyCarProbability: 0.3,
                 minSafetyCarLap: 5,
-                maxSafetyCarLap: 60
+                maxSafetyCarLap: 60,
+                firstLapChaosStdDev: 2.0,           // roughly 2 position changes on average for lap 1
+                overtakeProbabilityBase: 0.3       // 30% base chance for overtake with pace advantage
             );
 
             var monteCarloResult = await monteCarloSimulator.RunSimulation(

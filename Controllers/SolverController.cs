@@ -198,10 +198,12 @@ namespace F1_simulation.Controllers
                 output.AppendLine("Running Monte Carlo simulation with randomized strategies...");
 
                 var monteCarloSimulator = new MonteCarloSimulator(
-                    gaussianNoiseStdDev: 0.3,
-                    safetyCarProbability: 0.3,
+                    gaussianNoiseStdDev: 0.5,           // Increased lap-to-lap variance
+                    safetyCarProbability: 0.5,
                     minSafetyCarLap: 5,
-                    maxSafetyCarLap: 60
+                    maxSafetyCarLap: 60,
+                    firstLapChaosStdDev: 2.0,           // ~2 position changes on average for lap 1
+                    overtakeProbabilityBase: 0.3       // 30% base chance for overtake with pace advantage
                 );
 
                 var monteCarloResult = await monteCarloSimulator.RunSimulation(

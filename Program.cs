@@ -1,4 +1,5 @@
 ﻿using F1_simulation;
+using F1_simulation.Database;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -6,7 +7,11 @@ using Microsoft.Extensions.FileProviders;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Database connection string - update password as needed
+var connectionString = "server=127.0.0.1;port=3306;database=F1;user=root;password=bluedog13;";
+
 // Add services
+builder.Services.AddSingleton(new F1_cache(connectionString));
 builder.Services.AddControllers();
 builder.Services.AddCors(options =>
 {
@@ -34,7 +39,7 @@ app.UseSwaggerUI();
 app.UseCors("AllowAll");
 app.UseAuthorization();
 
-// Serve static files (CSS, JS, images, etc.)
+// Serve static files
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider(staticDir),

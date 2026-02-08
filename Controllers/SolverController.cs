@@ -3,7 +3,12 @@ using F1_simulation.Core.Tyres;
 using F1_simulation.Core.Strategy_solver;
 using F1_simulation.Core.Race_simulator;
 using F1_simulation.Core.Monte_carlo_simulator;
+using F1_simulation.Database;
+
 using Microsoft.AspNetCore.Mvc;
+using MySql.Data.MySqlClient;
+using Microsoft.IdentityModel.Tokens;
+using System.Diagnostics.Metrics;
 
 namespace F1_simulation.Controllers
 {
@@ -11,37 +16,44 @@ namespace F1_simulation.Controllers
     [Route("api/[controller]")]
     public class SolverController : ControllerBase
     {
+        private readonly F1_cache _cache;
+
+        public SolverController(F1_cache cache)
+        {
+            _cache = cache;
+        }
+
         [HttpGet("health")]
         public IActionResult Health()
         {
             return Ok(new { status = "ok", service = "C# F1 Simulation API" });
         }
 
-        [HttpGet("tyre-model")]
-        [HttpPost("tyre-model")]
-        public async Task<IActionResult> GetTyreModel([FromQuery] string country = "Spain", [FromQuery] int year = 2024)
-        {
-            try
-            {
-                var results = await TyreModelClient.CallTyreModelAsync(country, year);
-                if (results == null)
-                    return NotFound(new { error = "No tyre model data found" });
-
-                return Ok(new { success = true, data = results });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { error = ex.Message });
-            }
-        }
-
         [HttpGet("driver-data")]
         [HttpPost("driver-data")]
-        public async Task<IActionResult> GetDriverData([FromQuery] string country = "Spain", [FromQuery] int year = 2024)
+        public async Task<IActionResult> GetDriverData([FromQuery] string circuit = "Catalunya", [FromQuery] int year = 2024)
         {
             try
             {
-                var driverData = await TyreModelClient.CallDriverDataAsync(country, year);
+                // Check cache for session keys first
+                var cachedKeys = _cache.GetSessionKeys(circuit, year);
+                List<int> keys;
+                
+                if (cachedKeys.Count > 0)
+                {
+                    keys = cachedKeys;
+                }
+                else
+                {
+                    // Fetch from API and cache
+                    keys = await TyreModelClient.CallSessionsDataAsync(circuit, year);
+                    if (keys == null || keys.Count == 0)
+                        return NotFound(new { error = "No session keys found for the specified circuit and year" });
+                    
+                    _cache.AddSessions(circuit, year, keys);
+                }
+                    
+                var driverData = await TyreModelClient.CallDriverDataAsync(keys);
                 if (driverData == null)
                     return NotFound(new { error = "No driver data found" });
 
@@ -54,15 +66,55 @@ namespace F1_simulation.Controllers
         }
 
         [HttpGet("tyre-curves")]
-        public async Task<IActionResult> GetTyreCurves([FromQuery] string country = "Spain", [FromQuery] int year = 2024)
+        public async Task<IActionResult> GetTyreCurves([FromQuery] string circuit = "Catalunya", [FromQuery] int year = 2024)
         {
             try
             {
-                var results = await TyreModelClient.CallTyreModelAsync(country, year);
-                if (results == null)
+                // Check cache for tyre curves first
+                var cachedCurves = _cache.GetTyreCurves(circuit, year);
+                
+                if (cachedCurves.Count > 0)
+                {
+                    // Parse cached curves
+                    var results = new List<TyreModelClient.TyreResult>();
+                    foreach (var curveStr in cachedCurves)
+                    {
+                        var parts = curveStr.Split(' ');
+                        if (parts.Length == 3)
+                        {
+                            results.Add(new TyreModelClient.TyreResult
+                            {
+                                Compound = parts[0],
+                                Slope = double.Parse(parts[1]),
+                                Intercept = double.Parse(parts[2])
+                            });
+                        }
+                    }
+                    return Ok(new { success = true, curves = results });
+                }
+
+                // Not in cache, fetch from API
+                var keys = _cache.GetSessionKeys(circuit, year);
+                if (keys.Count == 0)
+                {
+                    keys = await TyreModelClient.CallSessionsDataAsync(circuit, year);
+                    if (keys == null || keys.Count == 0)
+                        return NotFound(new { error = "No session keys found for the specified circuit and year" });
+                    
+                    _cache.AddSessions(circuit, year, keys);
+                }
+                    
+                var apiResults = await TyreModelClient.CallTyreModelAsync(keys);
+                if (apiResults == null)
                     return NotFound(new { error = "No tyre curve data found" });
 
-                return Ok(new { success = true, curves = results });
+                // Cache the results
+                foreach (var result in apiResults)
+                {
+                    _cache.AddTyreCurves(circuit, year, result.Compound!, result.Slope, result.Intercept);
+                }
+
+                return Ok(new { success = true, curves = apiResults });
             }
             catch (Exception ex)
             {
@@ -71,13 +123,54 @@ namespace F1_simulation.Controllers
         }
 
         [HttpGet("montecarlo")]
-        public async Task<IActionResult> GetMonteCarlo([FromQuery] string country = "Spain", [FromQuery] int year = 2024, [FromQuery] int numSimulations = 1000)
+        public async Task<IActionResult> GetMonteCarlo([FromQuery] string circuit = "Catalunya", [FromQuery] int year = 2024, [FromQuery] int numSimulations = 1000)
         {
             try
             {
-                var results = await TyreModelClient.CallTyreModelAsync(country, year);
-                if (results == null)
-                    return NotFound(new { error = "No tyre model data found" });
+                // Check cache for session keys
+                var keys = _cache.GetSessionKeys(circuit, year);
+                if (keys.Count == 0)
+                {
+                    keys = await TyreModelClient.CallSessionsDataAsync(circuit, year);
+                    if (keys == null || keys.Count == 0)
+                        return NotFound(new { error = "No session keys found for the specified circuit and year" });
+                    
+                    _cache.AddSessions(circuit, year, keys);
+                }
+
+                // Check cache for tyre curves
+                var cachedCurves = _cache.GetTyreCurves(circuit, year);
+                List<TyreModelClient.TyreResult> results;
+                
+                if (cachedCurves.Count > 0)
+                {
+                    results = new List<TyreModelClient.TyreResult>();
+                    foreach (var curveStr in cachedCurves)
+                    {
+                        var parts = curveStr.Split(' ');
+                        if (parts.Length == 3)
+                        {
+                            results.Add(new TyreModelClient.TyreResult
+                            {
+                                Compound = parts[0],
+                                Slope = double.Parse(parts[1]),
+                                Intercept = double.Parse(parts[2])
+                            });
+                        }
+                    }
+                }
+                else
+                {
+                    results = await TyreModelClient.CallTyreModelAsync(keys);
+                    if (results == null)
+                        return NotFound(new { error = "No tyre model data found" });
+                    
+                    // Cache the results
+                    foreach (var result in results)
+                    {
+                        _cache.AddTyreCurves(circuit, year, result.Compound!, result.Slope, result.Intercept);
+                    }
+                }
 
                 var tyres = new List<Tyre>();
                 foreach (var r in results)
@@ -87,7 +180,7 @@ namespace F1_simulation.Controllers
 
                 var monteCarloSimulator = new MonteCarloSimulator();
                 var monteCarloResult = await monteCarloSimulator.RunSimulation(
-                    country: country,
+                    circuit: circuit,
                     year: year,
                     tyres: tyres,
                     raceLength: 66,
@@ -118,13 +211,54 @@ namespace F1_simulation.Controllers
         }
 
         [HttpGet("top-strategies")]
-        public async Task<IActionResult> GetTopStrategies([FromQuery] string country = "Spain", [FromQuery] int year = 2024, [FromQuery] int raceLength = 66)
+        public async Task<IActionResult> GetTopStrategies([FromQuery] string circuit = "Catalunya", [FromQuery] int year = 2024, [FromQuery] int raceLength = 66)
         {
             try
             {
-                var results = await TyreModelClient.CallTyreModelAsync(country, year);
-                if (results == null)
-                    return NotFound(new { error = "No tyre model data found" });
+                // Check cache for session keys
+                var keys = _cache.GetSessionKeys(circuit, year);
+                if (keys.Count == 0)
+                {
+                    keys = await TyreModelClient.CallSessionsDataAsync(circuit, year);
+                    if (keys == null || keys.Count == 0)
+                        return NotFound(new { error = "No session keys found for the specified circuit and year" });
+                    
+                    _cache.AddSessions(circuit, year, keys);
+                }
+
+                // Check cache for tyre curves
+                var cachedCurves = _cache.GetTyreCurves(circuit, year);
+                List<TyreModelClient.TyreResult> results;
+                
+                if (cachedCurves.Count > 0)
+                {
+                    results = new List<TyreModelClient.TyreResult>();
+                    foreach (var curveStr in cachedCurves)
+                    {
+                        var parts = curveStr.Split(' ');
+                        if (parts.Length == 3)
+                        {
+                            results.Add(new TyreModelClient.TyreResult
+                            {
+                                Compound = parts[0],
+                                Slope = double.Parse(parts[1]),
+                                Intercept = double.Parse(parts[2])
+                            });
+                        }
+                    }
+                }
+                else
+                {
+                    results = await TyreModelClient.CallTyreModelAsync(keys);
+                    if (results == null)
+                        return NotFound(new { error = "No tyre model data found" });
+                    
+                    // Cache the results
+                    foreach (var result in results)
+                    {
+                        _cache.AddTyreCurves(circuit, year, result.Compound!, result.Slope, result.Intercept);
+                    }
+                }
 
                 var tyres = new List<Tyre>();
                 foreach (var r in results)
@@ -226,11 +360,22 @@ namespace F1_simulation.Controllers
         }
 
         [HttpGet("qualifying")]
-        public async Task<IActionResult> GetQualifying([FromQuery] string country = "Spain", [FromQuery] int year = 2024)
+        public async Task<IActionResult> GetQualifying([FromQuery] string circuit = "Catalunya", [FromQuery] int year = 2024)
         {
             try
             {
-                var driverData = await TyreModelClient.CallDriverDataAsync(country, year);
+                // Check cache for session keys
+                var keys = _cache.GetSessionKeys(circuit, year);
+                if (keys.Count == 0)
+                {
+                    keys = await TyreModelClient.CallSessionsDataAsync(circuit, year);
+                    if (keys == null || keys.Count == 0)
+                        return NotFound(new { error = "No session keys found for the specified circuit and year" });
+                    
+                    _cache.AddSessions(circuit, year, keys);
+                }
+                    
+                var driverData = await TyreModelClient.CallDriverDataAsync(keys);
                 return Ok(new {success = true, qualifying = driverData});
             }
             catch (Exception ex)
@@ -241,11 +386,22 @@ namespace F1_simulation.Controllers
         }
 
         [HttpGet("race-pace")]
-        public async Task<IActionResult> GetRacePace([FromQuery] string country = "Spain", [FromQuery] int year = 2024)
+        public async Task<IActionResult> GetRacePace([FromQuery] string circuit = "Catalunya", [FromQuery] int year = 2024)
         {
             try
-            {
-                var racePaceData = await TyreModelClient.CallDriverDataAsync(country, year);
+            {   
+                // Check cache for session keys
+                var keys = _cache.GetSessionKeys(circuit, year);
+                if (keys.Count == 0)
+                {
+                    keys = await TyreModelClient.CallSessionsDataAsync(circuit, year);
+                    if (keys == null || keys.Count == 0)
+                        return NotFound(new { error = "No session keys found for the specified circuit and year" });
+                    
+                    _cache.AddSessions(circuit, year, keys);
+                }
+                    
+                var racePaceData = await TyreModelClient.CallDriverDataAsync(keys);
                 return Ok(new {success = true, racePace = racePaceData});
             }
             catch (Exception ex)
@@ -256,13 +412,54 @@ namespace F1_simulation.Controllers
         }
 
         [HttpGet("race-simulation")]
-        public async Task<IActionResult> GetRaceSimulation([FromQuery] string country = "Spain", [FromQuery] int year = 2024, [FromQuery] int raceLength = 66)
+        public async Task<IActionResult> GetRaceSimulation([FromQuery] string circuit = "Catalunya", [FromQuery] int year = 2024, [FromQuery] int raceLength = 66)
         {
             try
             {
-                var results = await TyreModelClient.CallTyreModelAsync(country, year);
-                if (results == null)
-                    return NotFound(new { error = "No tyre model data found" });
+                // Check cache for session keys
+                var keys = _cache.GetSessionKeys(circuit, year);
+                if (keys.Count == 0)
+                {
+                    keys = await TyreModelClient.CallSessionsDataAsync(circuit, year);
+                    if (keys == null || keys.Count == 0)
+                        return NotFound(new { error = "No session keys found for the specified circuit and year" });
+                    
+                    _cache.AddSessions(circuit, year, keys);
+                }
+
+                // Check cache for tyre curves
+                var cachedCurves = _cache.GetTyreCurves(circuit, year);
+                List<TyreModelClient.TyreResult> results;
+                
+                if (cachedCurves.Count > 0)
+                {
+                    results = new List<TyreModelClient.TyreResult>();
+                    foreach (var curveStr in cachedCurves)
+                    {
+                        var parts = curveStr.Split(' ');
+                        if (parts.Length == 3)
+                        {
+                            results.Add(new TyreModelClient.TyreResult
+                            {
+                                Compound = parts[0],
+                                Slope = double.Parse(parts[1]),
+                                Intercept = double.Parse(parts[2])
+                            });
+                        }
+                    }
+                }
+                else
+                {
+                    results = await TyreModelClient.CallTyreModelAsync(keys);
+                    if (results == null)
+                        return NotFound(new { error = "No tyre model data found" });
+                    
+                    // Cache the results
+                    foreach (var result in results)
+                    {
+                        _cache.AddTyreCurves(circuit, year, result.Compound!, result.Slope, result.Intercept);
+                    }
+                }
 
                 var tyres = new List<Tyre>();
                 foreach (var r in results)
@@ -271,7 +468,7 @@ namespace F1_simulation.Controllers
                 }
 
                 // Run race simulation
-                var raceResult = await RaceSimulator.SimulateRace(country, year, tyres, raceLength);
+                var raceResult = await RaceSimulator.SimulateRace(circuit, year, tyres, raceLength);
 
                 // Build race results data
                 var raceResults = new List<object>();

@@ -13,10 +13,10 @@ namespace F1_simulation.Core.Race_simulator
 {
     public class RaceSimulator
     {
-        public static async Task RunQualifyingSimulation(string country, int year)
+        public static async Task RunQualifyingSimulation(string circuit, int year)
         {
             // Get qualifying data from the API
-            var qualiData = await GetQualifyingData(country, year);
+            var qualiData = await GetQualifyingData(circuit, year);
             if (qualiData.HasValue)
             {
                 PrintQualifyingResults(qualiData.Value);
@@ -27,27 +27,54 @@ namespace F1_simulation.Core.Race_simulator
             }
         }
 
-        public static async Task<JsonElement?> GetQualifyingData(string country, int year)
+        public static async Task<JsonElement?> GetQualifyingData(string circuit, int year)
         {
             try
             {
                 using var client = new HttpClient();
                 client.BaseAddress = new Uri("http://127.0.0.1:8000");
 
-                var requestData = new
+                // First, get session keys
+                var sessionRequest = new
                 {
-                    country = country,
+                    circuit = circuit,
                     year = year
                 };
 
-                var json = JsonSerializer.Serialize(requestData);
+                var sessionJson = JsonSerializer.Serialize(sessionRequest);
+                var sessionContent = new StringContent(sessionJson, Encoding.UTF8, "application/json");
+
+                var sessionResponse = await client.PostAsync("/session_keys", sessionContent);
+
+                if (!sessionResponse.IsSuccessStatusCode)
+                {
+                    Console.WriteLine($"Session keys API request failed: {sessionResponse.StatusCode}");
+                    return null;
+                }
+
+                var sessionKeysString = await sessionResponse.Content.ReadAsStringAsync();
+                var sessionKeys = JsonSerializer.Deserialize<List<int>>(sessionKeysString);
+
+                if (sessionKeys == null || sessionKeys.Count == 0)
+                {
+                    Console.WriteLine("No session keys found");
+                    return null;
+                }
+
+                // Now get driver data using session keys
+                var driverDataRequest = new
+                {
+                    session_keys = sessionKeys
+                };
+
+                var json = JsonSerializer.Serialize(driverDataRequest);
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
 
                 var response = await client.PostAsync("/driver_data", content);
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    Console.WriteLine($"API request failed: {response.StatusCode}");
+                    Console.WriteLine($"Driver data API request failed: {response.StatusCode}");
                     return null;
                 }
 
@@ -117,7 +144,7 @@ namespace F1_simulation.Core.Race_simulator
 
 
         public static async Task<RaceSimulationResult> SimulateRace(
-            string country,
+            string circuit,
             int year,
             IEnumerable<Tyre> tyres,
             int raceLength = 66,
@@ -125,7 +152,7 @@ namespace F1_simulation.Core.Race_simulator
             double trafficPenalty = 0.5) // seconds lost when stuck behind another car
         {
             // Get qualifying and race pace data
-            var driverData = await GetQualifyingData(country, year);
+            var driverData = await GetQualifyingData(circuit, year);
             if (!driverData.HasValue)
             {
                 throw new Exception("Failed to get driver data from API");

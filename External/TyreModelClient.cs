@@ -3,13 +3,24 @@ namespace F1_simulation.External;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using Microsoft.Extensions.Primitives;
 
 public static class TyreModelClient
 {
     public class TyreRequest
     {
-        public string? country { get; set; }
-        public int year { get; set; }
+        [JsonPropertyName("session_keys")]
+        public List<int>? Session_keys {get; set;}
+    }
+
+    public class SessionRequest
+    {
+        [JsonPropertyName("circuit")]
+        public string? Circuit {get; set;}
+        
+        [JsonPropertyName("year")]
+        public int Year {get; set;}
     }
 
     public class TyreResult
@@ -61,15 +72,14 @@ public static class TyreModelClient
     }
 
 
-    public static async Task<List<TyreResult>?> CallTyreModelAsync(string Country = "Spain", int Year = 2024)
+    public static async Task<List<TyreResult>?> CallTyreModelAsync(List<int> session_keys)
     {
         var client = new HttpClient();
 
         // Case matters in the request to ensure no 422 error
         var request = new TyreRequest
         {
-            country = Country,
-            year = Year
+            Session_keys = session_keys
         };
 
         string json = JsonSerializer.Serialize(request);
@@ -87,7 +97,7 @@ public static class TyreModelClient
         return JsonSerializer.Deserialize<List<TyreResult>>(responseJson);
     }
 
-    public static async Task<DriverDataResult?> CallDriverDataAsync(string Country = "Spain", int Year = 2024)
+    public static async Task<DriverDataResult?> CallDriverDataAsync(List<int> session_keys)
     {
         var client = new HttpClient();
 
@@ -95,8 +105,7 @@ public static class TyreModelClient
         // Qualifying: fastest lap, Race pace: residuals vs baseline model
         var request = new TyreRequest
         {
-            country = Country,
-            year = Year
+            Session_keys = session_keys
         };
 
         string json = JsonSerializer.Serialize(request);
@@ -112,5 +121,29 @@ public static class TyreModelClient
         string responseJson = await response.Content.ReadAsStringAsync();
 
         return JsonSerializer.Deserialize<DriverDataResult>(responseJson);
+    }
+    public static async Task<List<int>?> CallSessionsDataAsync(string circuit, int year)
+    {
+        var client = new HttpClient();
+
+        var request = new SessionRequest
+        {
+            Circuit = circuit,
+            Year = year
+        };
+
+        string json = JsonSerializer.Serialize(request);
+        var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+        var response = await client.PostAsync(
+            "http://127.0.0.1:8000/session_keys",
+            content
+        );
+
+        response.EnsureSuccessStatusCode();
+
+        string responseJson = await response.Content.ReadAsStringAsync();
+
+        return JsonSerializer.Deserialize<List<int>>(responseJson);
     }
 }

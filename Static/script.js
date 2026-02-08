@@ -124,21 +124,21 @@ function runAll() {
 }
 
 function loadTyreCurves() {
-    const country = document.getElementById('countrySelect').value;
+    const circuit = document.getElementById('circuitSelect').value;
     const year = document.getElementById('yearSelect').value;
     const button = document.getElementById('loadCurvesBtn');
 
-    console.log('Loading curves for:', country, year);
+    console.log('Loading curves for:', circuit, year);
 
-    if (!country || !year) {
-        showStatus('Please select both country and year', 'error');
+    if (!circuit || !year) {
+        showStatus('Please select both circuit and year', 'error');
         return;
     }
 
     button.disabled = true;
     showStatus('Loading tyre curves...', 'loading');
 
-    const url = `http://localhost:5000/api/solver/tyre-curves?country=${country}&year=${year}`;
+    const url = `http://localhost:5000/api/solver/tyre-curves?circuit=${circuit}&year=${year}`;
     console.log('Fetching from:', url);
 
     fetch(url)
@@ -310,14 +310,14 @@ function plotTyreCurves(curves) {
 }
 
 async function loadStrats(){
-    const country = document.getElementById('countrySelect').value;
+    const circuit = document.getElementById('circuitSelect').value;
     const year = document.getElementById('yearSelect').value;
     const button = document.getElementById('loadStratsBtn');
     const status = document.getElementById('stratStatus');
     const container = document.getElementById('strategiesContainer');
 
-    if (!country || !year) {
-        status.textContent = 'Select country & year';
+    if (!circuit || !year) {
+        status.textContent = 'Select circuit & year';
         status.className = 'status-message status-error';
         status.style.display = 'block';
         return;
@@ -328,7 +328,7 @@ async function loadStrats(){
     status.className = 'status-message status-loading';
     status.style.display = 'block';
 
-    const url = `http://localhost:5000/api/solver/top-strategies?country=${country}&year=${year}`
+    const url = `http://localhost:5000/api/solver/top-strategies?country=${circuit}&year=${year}`
 
 
     let lastError = null;
@@ -482,13 +482,13 @@ async function loadStrats(){
 }
 
 function loadQuali() {
-    const country = document.getElementById('countrySelect').value;
+    const circuit = document.getElementById('circuitSelect').value;
     const year = document.getElementById('yearSelect').value;
     const button = document.getElementById('loadQualifyingBtn');
     const status = document.getElementById('qualiStatus');
 
-    if (!country || !year) {
-        status.textContent = 'Select country & year';
+    if (!circuit || !year) {
+        status.textContent = 'Select circuit & year';
         status.className = 'status-message status-error';
         status.style.display = 'block';
         return;
@@ -499,7 +499,7 @@ function loadQuali() {
     status.className = 'status-message status-loading';
     status.style.display = 'block';
 
-    const url = `http://localhost:5000/api/solver/qualifying?country=${(country)}&year=${year}`;
+    const url = `http://localhost:5000/api/solver/qualifying?circuit=${circuit}&year=${year}`;
 
     fetch(url)
         .then(response => response.json())
@@ -610,13 +610,13 @@ function plotQualifyingBarChart(qualifying) {
 
 
 function loadRacePace() {
-    const country = document.getElementById('countrySelect').value;
+    const circuit = document.getElementById('circuitSelect').value;
     const year = document.getElementById('yearSelect').value;
     const button = document.getElementById('loadRacePaceBtn');
     const status = document.getElementById('racePaceStatus');
 
-    if (!country || !year) {
-        status.textContent = 'Select country & year';
+    if (!circuit || !year) {
+        status.textContent = 'Select circuit & year';
         status.className = 'status-message status-error';
         status.style.display = 'block';
         return;
@@ -627,7 +627,7 @@ function loadRacePace() {
     status.className = 'status-message status-loading';
     status.style.display = 'block';
 
-    const url = `http://localhost:5000/api/solver/race-pace?country=${(country)}&year=${year}`;
+    const url = `http://localhost:5000/api/solver/race-pace?circuit=${circuit}&year=${year}`;
 
     fetch(url)
         .then(response => response.json())
@@ -741,13 +741,13 @@ function plotRacePaceBarChart(racePace) {
 
 // Load race simulation results
 async function loadRaceSimulation() {
-    const country = document.getElementById('countrySelect').value;
+    const circuit = document.getElementById('circuitSelect').value;
     const year = document.getElementById('yearSelect').value;
     const status = document.getElementById('raceSimStatus');
     const btn = document.getElementById('loadRaceSimBtn');
 
-    if (!country || !year) {
-        status.textContent = 'Select country & year';
+    if (!circuit || !year) {
+        status.textContent = 'Select circuit & year';
         status.className = 'status-message status-error';
         status.style.display = 'block';
         return;
@@ -759,7 +759,7 @@ async function loadRaceSimulation() {
     status.style.display = 'block';
 
     try {
-        const url = `http://localhost:5000/api/solver/race-simulation?country=${country}&year=${year}&raceLength=66`;
+        const url = `http://localhost:5000/api/solver/race-simulation?circuit=${circuit}&year=${year}&raceLength=66`;
         const resp = await fetch(url);
         const data = await resp.json();
         if (!data.success) throw new Error(data.error || 'Race simulation failed');
@@ -784,14 +784,14 @@ async function loadRaceSimulation() {
 
 // Load Monte Carlo distribution and render chart
 async function loadMonteCarlo() {
-    const country = document.getElementById('countrySelect').value;
+    const circuit = document.getElementById('circuitSelect').value;
     const year = document.getElementById('yearSelect').value;
     const sims = Number(document.getElementById('mcSims').value) || 500;
     const status = document.getElementById('monteStatus');
     const btn = document.getElementById('loadMonteBtn');
 
-    if (!country || !year) {
-        status.textContent = 'Select country & year';
+    if (!circuit || !year) {
+        status.textContent = 'Select circuit & year';
         status.className = 'status-message status-error';
         status.style.display = 'block';
         return;
@@ -803,7 +803,7 @@ async function loadMonteCarlo() {
     status.style.display = 'block';
 
     try {
-        const url = `http://localhost:5000/api/solver/montecarlo?country=${country}&year=${year}&numSimulations=${sims}`;
+        const url = `http://localhost:5000/api/solver/montecarlo?circuit=${circuit}&year=${year}&numSimulations=${sims}`;
         const resp = await fetch(url);
         const data = await resp.json();
         if (!data.success) throw new Error(data.error || 'Monte Carlo failed');
@@ -1206,10 +1206,10 @@ async function compareCustomStrategy() {
     const resultContainer = document.getElementById('customStrategyResultContainer');
     const resultDiv = document.getElementById('customStrategyResult');
     
-    const country = document.getElementById('countrySelect').value;
+    const circuit = document.getElementById('circuitSelect').value;
     const year = document.getElementById('yearSelect').value;
     
-    if (!country || !year) {
+    if (!circuit || !year) {
         status.textContent = 'Please select country and year first';
         status.className = 'status-message status-error';
         status.style.display = 'block';
@@ -1282,7 +1282,7 @@ async function compareCustomStrategy() {
     try {
         // Fetch tyre curves if not already loaded
         if (!globalTyreCurves) {
-            const curvesUrl = `http://localhost:5000/api/solver/tyre-curves?country=${country}&year=${year}`;
+            const curvesUrl = `http://localhost:5000/api/solver/tyre-curves?circuit=${circuit}&year=${year}`;
             const curvesResp = await fetch(curvesUrl);
             const curvesData = await curvesResp.json();
             
@@ -1295,7 +1295,7 @@ async function compareCustomStrategy() {
         
         // Fetch best strategy if not already loaded
         if (!globalBestStrategy) {
-            const stratsUrl = `http://localhost:5000/api/solver/top-strategies?country=${country}&year=${year}`;
+            const stratsUrl = `http://localhost:5000/api/solver/top-strategies?circuit=${circuit}&year=${year}`;
             const stratsResp = await fetch(stratsUrl);
             const stratsData = await stratsResp.json();
             
@@ -1488,7 +1488,7 @@ function createStrategyDisplayRow(label, stints, totalTime, delta, totalLaps, pi
 // Ensure monte dropdown updates when page loads with country/year change
 document.addEventListener('DOMContentLoaded', () => {
     const selectYear = document.getElementById('yearSelect');
-    const selectCountry = document.getElementById('countrySelect');
+    const selectCountry = document.getElementById('circuitSelect');
     if (selectYear) selectYear.addEventListener('change', () => { /* no-op until load */ });
     if (selectCountry) selectCountry.addEventListener('change', () => { /* no-op until load */ });
     

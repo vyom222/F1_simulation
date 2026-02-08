@@ -247,19 +247,23 @@ def fit_tyres_jointly(data_dict):
         }
 
 
-def get_curves(country, year):
-    results = []
-    results_dict = {}  # Store results by compound for constraint enforcement
-
+def get_sessions(circuit, year):
     sessions_url = (
-        f"https://api.openf1.org/v1/sessions?"
-        f"country_name={country}&year={year}&session_type={SESSION_TYPE}"
+    f"https://api.openf1.org/v1/sessions?"
+    f"circuit_short_name={circuit}&year={year}&session_type={SESSION_TYPE}"
     )
     sessions = fetch_and_cache(
         sessions_url,
-        f"sessions_{country}_{year}_{SESSION_TYPE}.json"
+        f"sessions_{circuit}_{year}_{SESSION_TYPE}.json"
     )
     session_keys = [s["session_key"] for s in sessions]
+    return session_keys
+
+
+def get_curves(session_keys):
+    results = []
+    results_dict = {}  # Store results by compound for constraint enforcement
+
 
     for compound in COMPOUNDS:
         all_X = []
@@ -514,28 +518,14 @@ def get_curves(country, year):
     return results
 
 
-def get_driver_data(country, year):
-
-    # Fetch practice sessions data
-    sessions_url = (
-        f"https://api.openf1.org/v1/sessions?"
-        f"country_name={country}&year={year}&session_type=Practice"
-    )
-    sessions = fetch_and_cache(
-        sessions_url,
-        f"sessions_{country}_{year}_practice_driver_data.json"
-    )
-
-    if not sessions or len(sessions) < 3:
-        return {"error": "Could not find enough practice sessions"}
+def get_driver_data(sessions_key):
 
     # QUALIFYING: Use FP3 for quali simulation
-    quali_session = sessions[2]  # FP3
-    quali_key = quali_session["session_key"]
+    quali_key = sessions_key[2]  # FP3
     quali_laps_url = f"https://api.openf1.org/v1/laps?session_key={quali_key}"
     quali_laps = fetch_and_cache(
         quali_laps_url,
-        f"quali_laps_{country}_{year}_{quali_key}.json"
+        f"quali_laps_{quali_key}.json"
     )
 
     # Process qualifying data
@@ -571,12 +561,11 @@ def get_driver_data(country, year):
     all_practice_laps = []
 
     # Collect data from all practice sessions
-    for session in sessions:
-        session_key = session["session_key"]
+    for session_key in sessions_key:
         laps_url = f"https://api.openf1.org/v1/laps?session_key={session_key}"
         laps = fetch_and_cache(
             laps_url,
-            f"practice_laps_{country}_{year}_{session_key}.json"
+            f"laps_{session_key}.json"
         )
         all_practice_laps.extend(laps)
 

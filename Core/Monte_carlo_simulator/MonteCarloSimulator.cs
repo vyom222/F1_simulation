@@ -38,7 +38,7 @@ namespace F1_simulation.Core.Monte_carlo_simulator
 
         // Runs multiple Monte Carlo simulations and returns average positions
         public async Task<MonteCarloResult> RunSimulation(
-            string country,
+            string circuit,
             int year,
             IEnumerable<Tyre> tyres,
             int raceLength = 66,
@@ -51,7 +51,7 @@ namespace F1_simulation.Core.Monte_carlo_simulator
             var allRaceInfos = new List<RaceInfo>();
 
             // Get initial driver data (qualifying and race pace)
-            var driverData = await RaceSimulator.GetQualifyingData(country, year);
+            var driverData = await RaceSimulator.GetQualifyingData(circuit, year);
             if (!driverData.HasValue)
             {
                 throw new Exception("Failed to get driver data from API");

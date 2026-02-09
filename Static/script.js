@@ -328,7 +328,7 @@ async function loadStrats(){
     status.className = 'status-message status-loading';
     status.style.display = 'block';
 
-    const url = `http://localhost:5000/api/solver/top-strategies?country=${circuit}&year=${year}`
+    const url = `http://localhost:5000/api/solver/top-strategies?circuit=${circuit}&year=${year}`
 
 
     let lastError = null;

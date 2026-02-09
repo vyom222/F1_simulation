@@ -145,7 +145,7 @@ namespace F1_simulation.Core.Strategy_solver
             // Try each starting tyre and find multiple timing variations
             foreach (var startTyre in _tyres.Keys)
             {
-                // First, find the optimal strategy
+                // Find the optimal strategy
                 var startState = new RaceState(
                     Tyre: startTyre,
                     TyreAge: 0,
@@ -177,59 +177,79 @@ namespace F1_simulation.Core.Strategy_solver
                     .ToList();
 
                 strategies.Add(new BasicStrategy(compoundSequence, pitStops, optimalResult.TotalTime));
-
-                // Find timing variations by exploring different pit constraints
-                // Simplified approach could later modify the DP constraints
-                var timingVariations = FindTimingVariations(startTyre, compoundSequence, optimalResult.TotalTime);
-                strategies.AddRange(timingVariations);
-            }
-
-            return strategies.OrderBy(s => s.TotalTime).ToList();
-        }
-
-        // Find strategies with the same compounds but different pit timings
-        private List<BasicStrategy> FindTimingVariations(TyreType startTyre, string compoundSequence, double optimalTime)
-        {
-            var variations = new List<BasicStrategy>();
-            var compounds = compoundSequence.Split("->").Select(c => Enum.Parse<TyreType>(c)).ToArray();
-
-            // For each pit stop, try timing variations around the optimal
-            // Simplified by using approx. hypothetical variations
-
-            // If optimal has pits at specific laps, create variations
-            if (compounds.Length >= 2) // Has at least one pit
-            {
-                // Create variations by shifting pit timings by ±1-2 laps
-                for (int offset = -2; offset <= 2; offset++)
+                
+                // Also explore slight variations in pit timing (±3 laps) with ACTUAL evaluation
+                // This helps create more realistic pit windows
+                if (pitStops.Count > 0) 
                 {
-                    if (offset == 0) continue; // Skip the optimal one we already have
-
-                    // Create a variation with shifted timing
-                    var variedPitStops = new List<(int lap, TyreType pitTo)>();
-
-                    // For simplicity, assume we have pit timing info from the optimal strategy
-                    // Room for improvement later
-                    if (variations.Count < 3) // Limit variations per strategy
+                    for (int offset = -3; offset <= 3; offset++)
                     {
-                        // Estimate varied timing - improve later
-                        double timeVariation = Math.Abs(offset) * 0.2; // Rough time impact
-                        double variedTime = optimalTime + timeVariation;
-
-                        // Create varied pit stops
-                        for (int i = 1; i < compounds.Length; i++)
+                        if (offset == 0) continue;
+                        
+                        // Create a variation by trying to pit earlier/later
+                        var variedStrategy = ExploreTimingVariation(startTyre, compoundList.ToArray(), pitStops, offset);
+                        if (variedStrategy.HasValue && !double.IsInfinity(variedStrategy.Value.TotalTime))
                         {
-                            int baseLap = 15 + (i-1) * 20; // Rough estimate of pit laps
-                            int variedLap = baseLap + offset;
-                            variedLap = Math.Max(1, Math.Min(_raceLength - 1, variedLap));
-                            variedPitStops.Add((variedLap, compounds[i]));
+                            strategies.Add(variedStrategy.Value);
                         }
-
-                        variations.Add(new BasicStrategy(compoundSequence, variedPitStops, variedTime));
                     }
                 }
             }
 
-            return variations;
+            return strategies.OrderBy(s => s.TotalTime).ToList();
+        }
+        
+        // Evaluate a specific strategy with given compound sequence and pit timings
+        private BasicStrategy? ExploreTimingVariation(TyreType startTyre, TyreType[] compounds, List<(int lap, TyreType pitTo)> originalPits, int lapOffset)
+        {
+            if (compounds.Length < 2) return null;
+            
+            // Shift pit laps by offset
+            var adjustedPits = new List<(int lap, TyreType pitTo)>();
+            foreach (var (lap, pitTo) in originalPits)
+            {
+                int newLap = lap + lapOffset;
+                if (newLap < 1 || newLap >= _raceLength) return null; // Invalid pit lap
+                adjustedPits.Add((newLap, pitTo));
+            }
+            
+            // Manually evaluate this specific strategy
+            double totalTime = 0;
+            TyreType currentTyre = startTyre;
+            int tyreAge = 0;
+            int lapsRemaining = _raceLength;
+            
+            for (int lap = 1; lap <= _raceLength; lap++)
+            {
+                // Check if we pit on this lap
+                var pitOnThisLap = adjustedPits.FirstOrDefault(p => p.lap == lap);
+                
+                if (pitOnThisLap != default)
+                {
+                    // Pit: add pit loss and start new stint
+                    totalTime += _pitLoss;
+                    currentTyre = pitOnThisLap.pitTo;
+                    tyreAge = 0;
+                }
+                
+                // Complete this lap
+                var tyre = _tyres[currentTyre];
+                int safeTyreAge = Math.Min(tyreAge, tyre.LapTimes.Length - 1);
+                double baseLapTime = tyre.LapTimes[safeTyreAge];
+                double fuelPenalty = lapsRemaining * _fuelPenaltyPerLap;
+                totalTime += baseLapTime + fuelPenalty;
+                
+                tyreAge++;
+                lapsRemaining--;
+            }
+            
+            // Check if uses at least 2 compounds
+            var usedCompounds = new HashSet<TyreType> { startTyre };
+            usedCompounds.UnionWith(adjustedPits.Select(p => p.pitTo));
+            if (usedCompounds.Count < 2) return null;
+            
+            var compoundSequence = string.Join("->", compounds);
+            return new BasicStrategy(compoundSequence, adjustedPits, totalTime);
         }
 
         // Group similar strategies into windows (both by compound sequence and time proximity)
@@ -333,6 +353,18 @@ namespace F1_simulation.Core.Strategy_solver
                 {
                     int minLap = pitLaps.Min();
                     int maxLap = pitLaps.Max();
+                    
+                    // Limit window size to maximum 15 laps
+                    const int MAX_WINDOW_SIZE = 15;
+                    int windowSize = maxLap - minLap;
+                    
+                    if (windowSize > MAX_WINDOW_SIZE)
+                    {
+                        // If window is too large, use a smaller window around the most common pit lap
+                        int medianLap = pitLaps.OrderBy(l => l).ElementAt(pitLaps.Count / 2);
+                        minLap = Math.Max(1, medianLap - MAX_WINDOW_SIZE / 2);
+                        maxLap = Math.Min(_raceLength - 1, medianLap + MAX_WINDOW_SIZE / 2);
+                    }
 
                     // Calculate time spread based on lap range (rough estimate)
                     double timeSpread = (maxLap - minLap) * 0.15; // 0.15 seconds per lap difference

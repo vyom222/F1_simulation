@@ -203,6 +203,7 @@ def fit_tyres_jointly(data_dict):
     
     # Constraints
     margin = 0.001
+    max_intercept_diff = 2.0  # Maximum 1 second difference between compounds
     constraints = [
         # Slope constraints: SOFT > MEDIUM > HARD
         {'type': 'ineq', 'fun': lambda x: x[0] - x[1] - margin},  # SOFT slope > MEDIUM slope
@@ -210,13 +211,15 @@ def fit_tyres_jointly(data_dict):
         # Intercept constraints: HARD > MEDIUM > SOFT (with minimum difference)
         {'type': 'ineq', 'fun': lambda x: x[5] - x[4] - INTERCEPT_DIFF},  # HARD intercept >= MEDIUM intercept + INTERCEPT_DIFF
         {'type': 'ineq', 'fun': lambda x: x[4] - x[3] - INTERCEPT_DIFF},  # MEDIUM intercept >= SOFT intercept + INTERCEPT_DIFF
+        # Maximum difference constraint: total spread <= 1 second
+        {'type': 'ineq', 'fun': lambda x: max_intercept_diff - (x[5] - x[3])},  # HARD - SOFT <= 1.0 second
     ]
     
     # Bounds: reasonable ranges for slopes and intercepts
     bounds = [
-        (0.001, 0.5),   # soft_slope (positive, reasonable degradation)
-        (0.001, 0.5),   # med_slope
-        (0.001, 0.5),   # hard_slope
+        (0.005, 0.4),   # soft_slope (positive, max 0.4s/lap degradation)
+        (0.005, 0.4),   # med_slope
+        (0.005, 0.4),   # hard_slope
         (50, 200),      # soft_int (lap times in seconds)
         (50, 200),      # med_int
         (50, 200),      # hard_int

@@ -280,9 +280,8 @@ namespace F1_simulation.Controllers
                     numStrategies
                 );
 
-                // Get strategies with windows and basic strategies for exact pit laps
+                // Get strategies with windows
                 var strategiesWithWindows = solver.FindMultipleStrategies();
-                var basicStrategies = solver.FindBasicStrategies();
 
                 var ordered = strategiesWithWindows.OrderBy(s => s.BestTime).Take(3).ToList();
 
@@ -290,42 +289,39 @@ namespace F1_simulation.Controllers
 
                 foreach (var s in ordered)
                 {
-                    // Try to find a matching basic strategy to get exact pit laps
-                    var match = basicStrategies.FirstOrDefault(b => b.CompoundSequence == s.CompoundSequence);
+                    // Use center of pit windows for pit laps (most representative)
+                    var pitLaps = s.PitWindowRanges.Select(w => (w.MinLap + w.MaxLap) / 2).ToList();
 
-                    var pitLaps = new List<int>();
-                    if (match.PitStops != null && match.PitStops.Count > 0)
-                    {
-                        pitLaps = match.PitStops.Select(p => p.lap).ToList();
-                    }
-                    else
-                    {
-                        // Fallback: use center of pit windows
-                        pitLaps = s.PitWindowRanges.Select(w => (w.MinLap + w.MaxLap) / 2).ToList();
-                    }
-
-                    // Compute stints lengths
+                    // Compute stint lengths based on pit laps
                     var compounds = s.CompoundSequence.Split("->");
                     var stints = new List<object>();
-                    int prevLap = 1;
+                    int currentLap = 1;
+                    
                     for (int i = 0; i < compounds.Length; i++)
                     {
                         int stintLength;
                         if (i < pitLaps.Count)
                         {
-                            stintLength = pitLaps[i] - prevLap + 1; // inclusive
-                            prevLap = pitLaps[i] + 1;
+                            // Pit on lap pitLaps[i]: complete lap pitLaps[i]-1 on current tyres, 
+                            // pit during lap pitLaps[i], start lap pitLaps[i] on new tyres
+                            stintLength = pitLaps[i] - currentLap;
+                            currentLap = pitLaps[i];
                         }
                         else
                         {
-                            stintLength = raceLength - prevLap + 1;
+                            // Final stint goes to the end
+                            stintLength = raceLength - currentLap + 1;
                         }
 
                         stints.Add(new { compound = compounds[i], length = stintLength });
                     }
 
                     // Build pit windows list
-                    var windows = s.PitWindowRanges.Select(w => new { min = w.MinLap, max = w.MaxLap, pitTo = w.PitTo.ToString() }).ToList();
+                    var windows = s.PitWindowRanges.Select(w => new { 
+                        min = w.MinLap, 
+                        max = w.MaxLap, 
+                        pitTo = w.PitTo.ToString() 
+                    }).ToList();
 
                     outList.Add(new {
                         compounds = compounds,

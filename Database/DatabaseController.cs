@@ -375,6 +375,103 @@ namespace F1_simulation.Database
             }
         }
 
+        // Race simulation cache methods
+        public List<Dictionary<string, object>> GetRaceSimulation(string circuit, int year)
+        {
+            List<Dictionary<string, object>> raceSimulation = [];
+            using (MySqlConnection conn = new MySqlConnection(_connection))
+            {
+                conn.Open();
+                string query = @"
+                SELECT rs.Position, rs.Strategy, rs.TotalTime, d.driverNumber
+                FROM COUNTRIES c 
+                JOIN RACES r
+                ON r.countryID = c.countryID
+                JOIN RaceSimulation rs
+                ON rs.raceID = r.raceID
+                JOIN DRIVERS d
+                ON d.driverID = rs.driverID
+                WHERE circuitShortName = @circuitName AND year = @year
+                ORDER BY rs.Position
+                ";
+                using (MySqlCommand cmd = new MySqlCommand(query, conn))
+                {
+                    cmd.Parameters.AddWithValue("@circuitName", circuit);
+                    cmd.Parameters.AddWithValue("@year", year);
+
+                    using (MySqlDataReader reader = cmd.ExecuteReader())
+                    {
+                        while(reader.Read())
+                        {
+                            var entry = new Dictionary<string, object>
+                            {
+                                ["position"] = Convert.ToInt32(reader["Position"]),
+                                ["driverNumber"] = Convert.ToInt32(reader["driverNumber"]),
+                                ["strategy"] = reader["Strategy"].ToString()!,
+                                ["totalTime"] = Convert.ToDouble(reader["TotalTime"])
+                            };
+                            raceSimulation.Add(entry);
+                        }
+                    }
+                }
+            }
+            return raceSimulation;
+        }
+
+        public void AddRaceSimulation(string circuit, int year, List<Dictionary<string, object>> raceSimData)
+        {
+            int raceid = 0;
+            using (MySqlConnection conn = new MySqlConnection(_connection))
+            {
+                conn.Open();
+                string query = @"
+                SELECT raceID
+                FROM COUNTRIES c 
+                JOIN RACES r ON r.countryID = c.countryID
+                WHERE circuitShortName = @circuitName AND year = @year
+                ";
+                using (MySqlCommand cmd = new MySqlCommand(query, conn))
+                {
+                    cmd.Parameters.AddWithValue("@circuitName", circuit);
+                    cmd.Parameters.AddWithValue("@year", year);
+
+                    using (MySqlDataReader reader = cmd.ExecuteReader())
+                    {
+                        while(reader.Read())
+                        {
+                            raceid = Convert.ToInt32(reader["raceID"]);
+                        }
+                    }
+                }
+                
+                if (raceid == 0)
+                {
+                    Console.WriteLine($"Warning: No race found for circuit '{circuit}' and year {year}. Skipping race simulation cache.");
+                    return;
+                }
+
+                foreach (var entry in raceSimData)
+                {
+                    // Get or create driver
+                    int driverId = GetDriver(conn, Convert.ToInt32(entry["driverNumber"]));
+                    
+                    string insertQuery = @"
+                    INSERT IGNORE INTO RaceSimulation (raceID, driverID, Position, Strategy, TotalTime)
+                    VALUES (@raceID, @driverID, @position, @strategy, @totalTime)";
+                    
+                    using (MySqlCommand cmd = new MySqlCommand(insertQuery, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@raceID", raceid);
+                        cmd.Parameters.AddWithValue("@driverID", driverId);
+                        cmd.Parameters.AddWithValue("@position", entry["position"]);
+                        cmd.Parameters.AddWithValue("@strategy", entry["strategy"].ToString());
+                        cmd.Parameters.AddWithValue("@totalTime", entry["totalTime"]);
+                        cmd.ExecuteNonQuery();
+                    }
+                }
+            }
+        }
+
         // Helper method to get or create a driver by driver number
         private int GetDriver(MySqlConnection conn, int driverNumber)
         {

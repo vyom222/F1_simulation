@@ -476,6 +476,37 @@ namespace F1_simulation.Controllers
         {
             try
             {
+                // Check cache for race simulation data
+                var cachedRaceSimulation = _cache.GetRaceSimulation(circuit, year);
+                if (cachedRaceSimulation.Count > 0)
+                {
+                    // Convert cached data to expected format
+                    var raceResults = new List<object>();
+                    double? firstPlaceTime = null;
+
+                    foreach (var entry in cachedRaceSimulation)
+                    {
+                        if (firstPlaceTime == null)
+                            firstPlaceTime = Convert.ToDouble(entry["totalTime"]);
+
+                        var deltaToFirst = (int)entry["position"] == 1 ? 0.0 : Convert.ToDouble(entry["totalTime"]) - firstPlaceTime.Value;
+
+                        raceResults.Add(new {
+                            position = entry["position"],
+                            driverNumber = entry["driverNumber"],
+                            strategy = entry["strategy"],
+                            totalTime = entry["totalTime"],
+                            deltaToFirst = deltaToFirst
+                        });
+                    }
+
+                    return Ok(new {
+                        success = true,
+                        raceResults = raceResults
+                    });
+                }
+
+                // If not cached, run simulation
                 // Check cache for session keys
                 var keys = _cache.GetSessionKeys(circuit, year);
                 if (keys.Count == 0)
@@ -531,13 +562,14 @@ namespace F1_simulation.Controllers
                 var raceResult = await RaceSimulator.SimulateRace(circuit, year, tyres, raceLength);
 
                 // Build race results data
-                var raceResults = new List<object>();
-                double? firstPlaceTime = null;
+                var raceResults2 = new List<object>();
+                var raceSimDataToCache = new List<Dictionary<string, object>>();
+                double? firstPlaceTime2 = null;
 
                 foreach (var driver in raceResult.FinalPositions!.OrderBy(d => d.Position))
                 {
-                    if (firstPlaceTime == null)
-                        firstPlaceTime = driver.TotalTime;
+                    if (firstPlaceTime2 == null)
+                        firstPlaceTime2 = driver.TotalTime;
 
                     // Get strategy from pit stops
                     var pitStops = raceResult.PitStops!.GetValueOrDefault(driver.DriverNumber, new List<(int, TyreType)>());
@@ -548,20 +580,35 @@ namespace F1_simulation.Controllers
                     }
                     var strategyString = string.Join("-", strategyParts);
 
-                    var deltaToFirst = driver.Position == 1 ? 0.0 : driver.TotalTime - firstPlaceTime.Value;
+                    var deltaToFirst = driver.Position == 1 ? 0.0 : driver.TotalTime - firstPlaceTime2.Value;
 
-                    raceResults.Add(new {
+                    raceResults2.Add(new {
                         position = driver.Position,
                         driverNumber = driver.DriverNumber,
                         strategy = strategyString,
                         totalTime = driver.TotalTime,
                         deltaToFirst = deltaToFirst
                     });
+
+                    // Prepare data for caching
+                    raceSimDataToCache.Add(new Dictionary<string, object>
+                    {
+                        ["position"] = driver.Position,
+                        ["driverNumber"] = driver.DriverNumber,
+                        ["strategy"] = strategyString,
+                        ["totalTime"] = driver.TotalTime
+                    });
+                }
+
+                // Cache the race simulation results
+                if (raceSimDataToCache.Count > 0)
+                {
+                    _cache.AddRaceSimulation(circuit, year, raceSimDataToCache);
                 }
 
                 return Ok(new {
                     success = true,
-                    raceResults = raceResults
+                    raceResults = raceResults2
                 });
             }
             catch (Exception ex)

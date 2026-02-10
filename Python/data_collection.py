@@ -524,7 +524,10 @@ def get_curves(session_keys):
 def get_driver_data(sessions_key):
 
     # QUALIFYING: Use FP3 for quali simulation
-    quali_key = sessions_key[2]  # FP3
+    if len(sessions_key)>=3:
+        quali_key = sessions_key[2]  # FP3
+    else:
+        quali_key = sessions_key[0] # Could be a sprint race so take FP1
     quali_laps_url = f"https://api.openf1.org/v1/laps?session_key={quali_key}"
     quali_laps = fetch_and_cache(
         quali_laps_url,

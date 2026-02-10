@@ -360,7 +360,25 @@ namespace F1_simulation.Controllers
         {
             try
             {
-                // Check cache for session keys
+                // Check cache for qualifying data
+                var cachedQualifying = _cache.GetQualifying(circuit, year);
+                if (cachedQualifying.Count > 0)
+                {
+                    // Convert cached data to match DriverDataResult structure
+                    var result = new TyreModelClient.DriverDataResult
+                    {
+                        qualifying = cachedQualifying.Select(q => new TyreModelClient.DriverQualifyingData
+                        {
+                            position = (int)q["position"],
+                            driver_number = (int)q["driver_number"],
+                            gap = q["gap"].ToString()
+                        }).ToList(),
+                        race_pace = null
+                    };
+                    return Ok(new { success = true, qualifying = result });
+                }
+
+                // If not cached, fetch from API
                 var keys = _cache.GetSessionKeys(circuit, year);
                 if (keys.Count == 0)
                 {
@@ -372,6 +390,20 @@ namespace F1_simulation.Controllers
                 }
                     
                 var driverData = await TyreModelClient.CallDriverDataAsync(keys);
+                
+                // Cache the qualifying data
+                if (driverData?.qualifying != null && driverData.qualifying.Count > 0)
+                {
+                    var qualifyingList = driverData.qualifying.Select(q => new Dictionary<string, object>
+                    {
+                        ["position"] = q.position,
+                        ["driver_number"] = q.driver_number,
+                        ["gap"] = q.gap ?? "0.000"
+                    }).ToList();
+                    
+                    _cache.AddQualifying(circuit, year, qualifyingList);
+                }
+                
                 return Ok(new {success = true, qualifying = driverData});
             }
             catch (Exception ex)
@@ -385,8 +417,26 @@ namespace F1_simulation.Controllers
         public async Task<IActionResult> GetRacePace([FromQuery] string circuit = "Catalunya", [FromQuery] int year = 2024)
         {
             try
-            {   
-                // Check cache for session keys
+            {
+                // Check cache for race pace data
+                var cachedRacePace = _cache.GetRacePace(circuit, year);
+                if (cachedRacePace.Count > 0)
+                {
+                    // Convert cached data to match DriverDataResult structure
+                    var result = new TyreModelClient.DriverDataResult
+                    {
+                        qualifying = null,
+                        race_pace = cachedRacePace.Select(rp => new TyreModelClient.DriverRaceData
+                        {
+                            position = (int)rp["position"],
+                            driver_number = (int)rp["driver_number"],
+                            gap_to_fastest = rp["gap_to_fastest"].ToString()
+                        }).ToList()
+                    };
+                    return Ok(new { success = true, racePace = result });
+                }
+
+                // If not cached, fetch from API
                 var keys = _cache.GetSessionKeys(circuit, year);
                 if (keys.Count == 0)
                 {
@@ -398,6 +448,20 @@ namespace F1_simulation.Controllers
                 }
                     
                 var racePaceData = await TyreModelClient.CallDriverDataAsync(keys);
+                
+                // Cache the race pace data
+                if (racePaceData?.race_pace != null && racePaceData.race_pace.Count > 0)
+                {
+                    var racePaceList = racePaceData.race_pace.Select(rp => new Dictionary<string, object>
+                    {
+                        ["position"] = rp.position,
+                        ["driver_number"] = rp.driver_number,
+                        ["gap_to_fastest"] = rp.gap_to_fastest ?? "0.000"
+                    }).ToList();
+                    
+                    _cache.AddRacePace(circuit, year, racePaceList);
+                }
+                
                 return Ok(new {success = true, racePace = racePaceData});
             }
             catch (Exception ex)

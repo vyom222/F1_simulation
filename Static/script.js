@@ -1,94 +1,42 @@
-// Driver number to surname mapping
-const driverNumberToSurname = {
-    1: 'Verstappen',
-    2: 'Sargeant',
-    3: 'Ricciardo',
-    4: 'Norris',
-    5: 'Bortoleto',
-    6: 'Hadjar',
-    7: 'Doohan',
-    10: 'Gasly',
-    11: 'Perez',
-    12: 'Antonelli',
-    14: 'Alonso',
-    16: 'Leclerc',
-    18: 'Stroll',
-    20: 'Magnussen',
-    21: 'de Vries',
-    22: 'Tsunoda',
-    23: 'Albon',
-    24: 'Zhou',
-    27: 'Hulkenberg',
-    30: 'Lawson',
-    31: 'Ocon',
-    40: 'Lawson',
-    43: 'Colapinto',
-    44: 'Hamilton',
-    55: 'Sainz',
-    63: 'Russell',
-    77: 'Bottas',
-    81: 'Piastri',
-    87: 'Bearman'
-};
+// Driver and team data loaded from API
+let driverNumberToSurname = {};
+let driverTeamColorByYear = {}; // Maps: year -> driverNumber -> color
 
-// Team name to colour mapping
-const teamToColour = {
-    'MERCEDES': '#40E0D0',
-    'FERRARI': '#FF0000',
-    'RED BULL RACING': '#003366',
-    'RACING BULLS': '#5192d3',
-    'MCLAREN': '#FF5900',
-    'ALPINE': '#ff95e4',
-    'ASTON MARTIN': '#00a86ac5',
-    'WILLIAMS': '#7be0ff',
-    'HAAS': '#9a9999',
-    'ALFA ROMEO': '#8B0000',
-    'SAUBER': '#1dff09',
-    'ALPHATAURI': '#484848',
-};
+// Load driver and team data from API
+async function loadDriverTeamData() {
+    try {
+        // Load drivers
+        const driversResp = await fetch('http://localhost:5000/api/solver/drivers');
+        const driversData = await driversResp.json();
+        if (driversData.success) {
+            driverNumberToSurname = {};
+            driversData.drivers.forEach(d => {
+                driverNumberToSurname[d.driver_number] = d.driver_name;
+            });
+        }
 
-// Year-specific driver number to team mappings
-const driverNumberToTeamByYear = {
-    '2023': {
-        1: 'Red Bull Racing', 11: 'Red Bull Racing',
-        16: 'Ferrari', 55: 'Ferrari',
-        44: 'Mercedes', 63: 'Mercedes',
-        31: 'Alpine', 10: 'Alpine',
-        4: 'McLaren', 81: 'McLaren',
-        77: 'Alfa Romeo', 24: 'Alfa Romeo',
-        18: 'Aston Martin', 14: 'Aston Martin',
-        20: 'Haas', 27: 'Haas',
-        3: 'AlphaTauri', 22: 'AlphaTauri',
-        23: 'Williams', 2: 'Williams'
-    },
-    '2024': {
-        1: 'Red Bull Racing', 11: 'Red Bull Racing',
-        44: 'Mercedes', 63: 'Mercedes',
-        16: 'Ferrari', 55: 'Ferrari',
-        4: 'McLaren', 81: 'McLaren',
-        14: 'Aston Martin', 18: 'Aston Martin',
-        10: 'Alpine', 31: 'Alpine',
-        27: 'Haas', 20: 'Haas',
-        77: 'Sauber', 24: 'Sauber',
-        3: 'Racing Bulls', 22: 'Racing Bulls',
-        23: 'Williams', 2: 'Williams'
-    },
-    '2025': {
-        4: 'McLaren', 81: 'McLaren',
-        16: 'Ferrari', 44: 'Ferrari',
-        1: 'Red Bull Racing', 30: 'Red Bull Racing',
-        63: 'Mercedes', 12: 'Mercedes',
-        14: 'Aston Martin', 18: 'Aston Martin',
-        10: 'Alpine', 7: 'Alpine', 43: 'Alpine',
-        31: 'Haas', 87: 'Haas',
-        5: 'Sauber', 27: 'Sauber',
-        22: 'Racing Bulls', 6: 'Racing Bulls',
-        23: 'Williams', 55: 'Williams'
+        // Load driver-team mappings with colors for each year
+        const years = [2023, 2024, 2025];
+        for (const year of years) {
+            const dtResp = await fetch(`http://localhost:5000/api/solver/driver-teams?year=${year}`);
+            const dtData = await dtResp.json();
+            if (dtData.success) {
+                driverTeamColorByYear[year.toString()] = {};
+                dtData.driver_teams.forEach(dt => {
+                    driverTeamColorByYear[year.toString()][dt.driver_number] = dt.colour;
+                });
+            }
+        }
+    } catch (error) {
+        console.error('Error loading driver/team data:', error);
     }
-};
+}
 
 // Run everything on page load
-window.addEventListener('load', function() {
+window.addEventListener('load', async function() {
+    // Load driver and team data first
+    await loadDriverTeamData();
+    
     // Check C# API health
     fetch('http://localhost:5000/api/solver/health')
         .then(response => response.json())
@@ -557,13 +505,10 @@ function plotQualifyingBarChart(qualifying) {
         const gapValue = d.gap;
         gapSeconds.push(parseGapSeconds(gapValue));
 
-        // Determine team name for that year
+        // Get color directly from driver-team mapping for the selected year
         const selectedYear = document.getElementById('yearSelect')?.value || '2024';
-        const mappingForYear = driverNumberToTeamByYear[selectedYear];
-        const teamFromMap = mappingForYear[Number(driverNum)];
-        const possibleTeam = teamFromMap || '';
-        const normTeam = String(possibleTeam).trim().toUpperCase();
-        const colour = teamToColour[normTeam] || '#BDBDBD';
+        const yearMapping = driverTeamColorByYear[selectedYear] || {};
+        const colour = yearMapping[Number(driverNum)] || '#BDBDBD';
         let baseHex = String(colour).trim();
         backgroundColors.push(baseHex + 'CC');
         borderColors.push(baseHex);
@@ -689,13 +634,10 @@ function plotRacePaceBarChart(racePace) {
         const gapValue = d.gap_to_fastest;
         gapSeconds.push(parseGapSeconds(gapValue));
 
-        // Determine team name: select mapping for the currently selected year first
+        // Get color directly from driver-team mapping for the selected year
         const selectedYear = document.getElementById('yearSelect')?.value || '2024';
-        const mappingForYear = driverNumberToTeamByYear[selectedYear];
-        const teamFromMap = mappingForYear[Number(driverNum)];
-        const possibleTeam = teamFromMap || '';
-        const normTeam = String(possibleTeam).trim().toUpperCase();
-        const colour = teamToColour[normTeam] || '#BDBDBD';
+        const yearMapping = driverTeamColorByYear[selectedYear] || {};
+        const colour = yearMapping[Number(driverNum)] || '#BDBDBD';
         let baseHex = String(colour).trim();
         backgroundColors.push(baseHex + 'CC');
         borderColors.push(baseHex);

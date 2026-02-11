@@ -29,6 +29,48 @@ namespace F1_simulation.Controllers
             return Ok(new { status = "ok", service = "C# F1 Simulation API" });
         }
 
+        [HttpGet("drivers")]
+        public IActionResult GetDrivers()
+        {
+            try
+            {
+                var drivers = _cache.GetAllDrivers();
+                return Ok(new { success = true, drivers = drivers });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+        }
+
+        [HttpGet("teams")]
+        public IActionResult GetTeams()
+        {
+            try
+            {
+                var teams = _cache.GetAllTeams();
+                return Ok(new { success = true, teams = teams });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+        }
+
+        [HttpGet("driver-teams")]
+        public IActionResult GetDriverTeams([FromQuery] int year = 2024)
+        {
+            try
+            {
+                var driverTeams = _cache.GetDriverTeamsByYear(year);
+                return Ok(new { success = true, driver_teams = driverTeams });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+        }
+
         [HttpGet("laps")]
         [HttpPost("laps")]
         public async Task<IActionResult> GetLapsData([FromQuery] string circuit = "Catalunya")

@@ -6,7 +6,6 @@ using F1_simulation.Core.Monte_carlo_simulator;
 using Microsoft.AspNetCore.Mvc;
 using MySql.Data.MySqlClient;
 
-// CHANGE LAPS TO CORRECT NUMBER
 // ADD OTHER CIRCUITS
 namespace F1_simulation.Database
 {
@@ -711,8 +710,97 @@ namespace F1_simulation.Database
 
                 return Convert.ToInt32(result);
             }
+        }
 
+        // Get all drivers with their numbers and names
+        public List<Dictionary<string, object>> GetAllDrivers()
+        {
+            List<Dictionary<string, object>> drivers = [];
+            using (MySqlConnection conn = new MySqlConnection(_connection))
+            {
+                conn.Open();
+                string query = @"
+                SELECT driverNumber, 
+                driverName FROM DRIVERS";
+                using (MySqlCommand cmd = new MySqlCommand(query, conn))
+                {
+                    using (MySqlDataReader reader = cmd.ExecuteReader())
+                    {
+                        while(reader.Read())
+                        {
+                            drivers.Add(new Dictionary<string, object>
+                            {
+                                ["driver_number"] = Convert.ToInt32(reader["driverNumber"]),
+                                ["driver_name"] = reader["driverName"].ToString()!
+                            });
+                        }
+                    }
+                }
+            }
+            return drivers;
+        }
 
+        // Get all teams with their colors
+        public List<Dictionary<string, object>> GetAllTeams()
+        {
+            List<Dictionary<string, object>> teams = [];
+            using (MySqlConnection conn = new MySqlConnection(_connection))
+            {
+                conn.Open();
+                string query = @"
+                SELECT teamName, colour 
+                FROM TEAMS";
+                using (MySqlCommand cmd = new MySqlCommand(query, conn))
+                {
+                    using (MySqlDataReader reader = cmd.ExecuteReader())
+                    {
+                        while(reader.Read())
+                        {
+                            teams.Add(new Dictionary<string, object>
+                            {
+                                ["team_name"] = reader["teamName"].ToString()!,
+                                ["colour"] = reader["colour"].ToString()!
+                            });
+                        }
+                    }
+                }
+            }
+            return teams;
+        }
+
+        // Get driver-team mappings by year
+        public List<Dictionary<string, object>> GetDriverTeamsByYear(int year)
+        {
+            List<Dictionary<string, object>> driverTeams = [];
+            using (MySqlConnection conn = new MySqlConnection(_connection))
+            {
+                conn.Open();
+                string query = @"
+                SELECT d.driverNumber, t.teamName, t.colour
+                FROM DRIVERTEAMS dt
+                JOIN DRIVERS d
+                ON d.driverID = dt.driverID
+                JOIN TEAMS t
+                ON t.teamID = dt.teamID
+                WHERE dt.year = @year";
+                using (MySqlCommand cmd = new MySqlCommand(query, conn))
+                {
+                    cmd.Parameters.AddWithValue("@year", year);
+                    using (MySqlDataReader reader = cmd.ExecuteReader())
+                    {
+                        while(reader.Read())
+                        {
+                            driverTeams.Add(new Dictionary<string, object>
+                            {
+                                ["driver_number"] = Convert.ToInt32(reader["driverNumber"]),
+                                ["team_name"] = reader["teamName"].ToString()!,
+                                ["colour"] = reader["colour"].ToString()!
+                            });
+                        }
+                    }
+                }
+            }
+            return driverTeams;
         }
     }
 }

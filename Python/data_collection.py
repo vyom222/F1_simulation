@@ -11,17 +11,23 @@ from sklearn.linear_model import LinearRegression, HuberRegressor, RANSACRegress
 from scipy.optimize import minimize
 import random
 
-### CHANGE LATER TO DATABASE INSTEAD 
+
+# In-memory cache to avoid repeated API calls during the same session
+_session_cache = {}
 
 def fetch_and_cache(url):
+    # Check if already in memory cache
+    if url in _session_cache:
+        return _session_cache[url]
+    
+    # Fetch from API
     response = requests.get(url, verify=certifi.where(), timeout=30)
     response.raise_for_status()
     data = response.json()
-
+    
+    # Store in memory cache
+    _session_cache[url] = data
     return data
-
-
-### END OF SECTION THAT NEEDS UPDATING LATER
 
 # Check that data is not missing entries
 def is_valid_stint(stint):
@@ -235,9 +241,7 @@ def get_sessions(circuit, year):
     f"https://api.openf1.org/v1/sessions?"
     f"circuit_short_name={circuit}&year={year}&session_type={SESSION_TYPE}"
     )
-    sessions = fetch_and_cache(
-        sessions_url
-    )
+    sessions = fetch_and_cache(sessions_url)
     session_keys = [s["session_key"] for s in sessions]
     return session_keys
 

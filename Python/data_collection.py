@@ -13,30 +13,10 @@ import random
 
 ### CHANGE LATER TO DATABASE INSTEAD 
 
-# Changed due to all the refactoring with the directories
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))   # python/
-PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, ".."))
-
-ASSETS_DIR = os.path.join(PROJECT_ROOT, "Assets")
-CACHE_DIR = os.path.join(ASSETS_DIR, "cache")
-PLOT_DIR = os.path.join(ASSETS_DIR, "Tyre_degradation")
-
-os.makedirs(CACHE_DIR, exist_ok=True)
-os.makedirs(PLOT_DIR, exist_ok=True)
-
-
-def fetch_and_cache(url, fname):
-    path = os.path.join(CACHE_DIR, fname)
-
-    if os.path.exists(path):
-        with open(path, "r") as f:
-            data = json.load(f)
-    else:
-        response = requests.get(url, verify=certifi.where(), timeout=30)
-        response.raise_for_status()
-        data = response.json()
-        with open(path, "w") as f:
-            json.dump(data, f)
+def fetch_and_cache(url):
+    response = requests.get(url, verify=certifi.where(), timeout=30)
+    response.raise_for_status()
+    data = response.json()
 
     return data
 
@@ -256,8 +236,7 @@ def get_sessions(circuit, year):
     f"circuit_short_name={circuit}&year={year}&session_type={SESSION_TYPE}"
     )
     sessions = fetch_and_cache(
-        sessions_url,
-        f"sessions_{circuit}_{year}_{SESSION_TYPE}.json"
+        sessions_url
     )
     session_keys = [s["session_key"] for s in sessions]
     return session_keys
@@ -274,12 +253,10 @@ def get_curves(session_keys):
 
         for session in session_keys:
             stints = fetch_and_cache(
-                f"https://api.openf1.org/v1/stints?session_key={session}",
-                f"stints_{session}.json"
+                f"https://api.openf1.org/v1/stints?session_key={session}"
             )
             laps = fetch_and_cache(
-                f"https://api.openf1.org/v1/laps?session_key={session}",
-                f"laps_{session}.json"
+                f"https://api.openf1.org/v1/laps?session_key={session}"
             )
 
             stints = [s for s in stints if is_valid_stint(s)]
@@ -530,8 +507,7 @@ def get_driver_data(sessions_key):
         quali_key = sessions_key[0] # Could be a sprint race so take FP1
     quali_laps_url = f"https://api.openf1.org/v1/laps?session_key={quali_key}"
     quali_laps = fetch_and_cache(
-        quali_laps_url,
-        f"quali_laps_{quali_key}.json"
+        quali_laps_url
     )
 
     # Process qualifying data
@@ -570,8 +546,7 @@ def get_driver_data(sessions_key):
     for session_key in sessions_key:
         laps_url = f"https://api.openf1.org/v1/laps?session_key={session_key}"
         laps = fetch_and_cache(
-            laps_url,
-            f"laps_{session_key}.json"
+            laps_url
         )
         all_practice_laps.extend(laps)
 

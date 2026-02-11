@@ -46,10 +46,10 @@ namespace F1_simulation.Controllers
                 else
                 {
                     // Fetch from API and cache
-                    keys = await TyreModelClient.CallSessionsDataAsync(circuit, year);
-                    if (keys == null || keys.Count == 0)
+                    var ApiKeys = await TyreModelClient.CallSessionsDataAsync(circuit, year);
+                    if (ApiKeys == null || ApiKeys.Count == 0)
                         return NotFound(new { error = "No session keys found for the specified circuit and year" });
-                    
+                    keys = ApiKeys;
                     _cache.AddSessions(circuit, year, keys);
                 }
                     
@@ -161,9 +161,11 @@ namespace F1_simulation.Controllers
                 }
                 else
                 {
-                    results = await TyreModelClient.CallTyreModelAsync(keys);
-                    if (results == null)
+                    var apiResults = await TyreModelClient.CallTyreModelAsync(keys);
+                    if (apiResults == null)
                         return NotFound(new { error = "No tyre model data found" });
+                    
+                    results = apiResults;
                     
                     // Cache the results
                     foreach (var result in results)
@@ -318,10 +320,11 @@ namespace F1_simulation.Controllers
                 }
                 else
                 {
-                    results = await TyreModelClient.CallTyreModelAsync(keys);
-                    if (results == null)
+                    var apiResults = await TyreModelClient.CallTyreModelAsync(keys);
+                    if (apiResults == null)
                         return NotFound(new { error = "No tyre model data found" });
                     
+                    results = apiResults;
                     // Cache the results
                     foreach (var result in results)
                     {
@@ -647,10 +650,11 @@ namespace F1_simulation.Controllers
                 }
                 else
                 {
-                    results = await TyreModelClient.CallTyreModelAsync(keys);
-                    if (results == null)
+                    var apiResults = await TyreModelClient.CallTyreModelAsync(keys);
+                    if (apiResults == null)
                         return NotFound(new { error = "No tyre model data found" });
                     
+                    results = apiResults;
                     // Cache the results
                     foreach (var result in results)
                     {

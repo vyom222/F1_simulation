@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using F1_simulation.Core.Race_simulator;
 using F1_simulation.Core.Strategy_solver;

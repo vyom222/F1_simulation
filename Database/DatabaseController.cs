@@ -6,7 +6,8 @@ using F1_simulation.Core.Monte_carlo_simulator;
 using Microsoft.AspNetCore.Mvc;
 using MySql.Data.MySqlClient;
 
-
+// CHANGE LAPS TO CORRECT NUMBER
+// ADD OTHER CIRCUITS
 namespace F1_simulation.Database
 {
     public class F1_cache
@@ -16,6 +17,32 @@ namespace F1_simulation.Database
         public F1_cache(string connection)
         {
             _connection = connection;
+        }
+
+        public int GetLaps(string circuit)
+        {
+            using (MySqlConnection conn = new MySqlConnection(_connection))
+            {
+                int laps = 0;
+                conn.Open();
+                string query = @"
+                SELECT Laps
+                FROM countries
+                WHERE circuitShortName = @circuitName";
+                using(MySqlCommand cmd = new MySqlCommand(query,conn))
+                {
+                    cmd.Parameters.AddWithValue("@circuitName", circuit);
+                    using (MySqlDataReader reader = cmd.ExecuteReader())
+                    {
+                        while(reader.Read())
+                        {
+                            laps = Convert.ToInt32(reader["Laps"]);
+                        }
+                    }
+
+                }
+                return laps;
+            }
         }
 
         public List<string> GetTyreCurves(string circuit, int year)

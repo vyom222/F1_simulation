@@ -29,6 +29,24 @@ namespace F1_simulation.Controllers
             return Ok(new { status = "ok", service = "C# F1 Simulation API" });
         }
 
+        [HttpGet("laps")]
+        [HttpPost("laps")]
+        public async Task<IActionResult> GetLapsData([FromQuery] string circuit = "Catalunya")
+        {
+            try
+            {
+                // Check cache for session keys first
+                int laps = _cache.GetLaps(circuit);
+                return Ok(new { success = true, data = laps });
+
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+        }
+
+
         [HttpGet("driver-data")]
         [HttpPost("driver-data")]
         public async Task<IActionResult> GetDriverData([FromQuery] string circuit = "Catalunya", [FromQuery] int year = 2024)
@@ -180,12 +198,14 @@ namespace F1_simulation.Controllers
                     tyres.Add(TyreCreation.Create(r.Compound!, r.Slope, r.Intercept));
                 }
 
+                int laps = _cache.GetLaps(circuit);
+
                 var monteCarloSimulator = new MonteCarloSimulator();
                 var monteCarloResult = await monteCarloSimulator.RunSimulation(
                     circuit: circuit,
                     year: year,
                     tyres: tyres,
-                    raceLength: 66,
+                    raceLength: laps,
                     pitLoss: 25.0,
                     trafficPenalty: 0.5,
                     numSimulations: numSimulations
@@ -343,9 +363,11 @@ namespace F1_simulation.Controllers
                 double windowSize = 2;
                 int numStrategies = 3;
 
+                int laps = _cache.GetLaps(circuit);
+
                 var solver = new OptimalStrategy(
                     tyres,
-                    raceLength,
+                    laps,
                     pitLoss,
                     fuelPenalty,
                     windowSize,
@@ -389,8 +411,8 @@ namespace F1_simulation.Controllers
                         else
                         {
                             // Final stint goes to the end
-                            stintLength = raceLength - currentLap + 1;
-                            stintEnd = raceLength;
+                            stintLength = laps - currentLap + 1;
+                            stintEnd = laps;
                         }
 
                         stints.Add(new { compound = compounds[i], length = stintLength });
@@ -669,7 +691,8 @@ namespace F1_simulation.Controllers
                 }
 
                 // Run race simulation
-                var raceResult = await RaceSimulator.SimulateRace(circuit, year, tyres, raceLength);
+                int laps = _cache.GetLaps(circuit);
+                var raceResult = await RaceSimulator.SimulateRace(circuit, year, tyres, laps);
 
                 // Build race results data
                 var raceResults2 = new List<object>();

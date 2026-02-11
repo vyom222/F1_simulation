@@ -654,7 +654,7 @@ def get_driver_data(sessions_key):
                     result["gap_to_fastest"] = f"+{adjusted_gap:.3f}"
     else:
         # Build baseline model T_i = mu + b_fuel * f_i + b_deg * a_i + b_compound * c_i + e_i
-        race_length = 66  # Assume known race length
+        race_length = 66  # Assume known race length acts more as a random coefficient
         X = []
         y = []
 

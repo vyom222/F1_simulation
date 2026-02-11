@@ -215,7 +215,76 @@ namespace F1_simulation.Controllers
         {
             try
             {
-                // Check cache for session keys
+                // Check cache for top strategies
+                var cachedStrategies = _cache.GetTopStrategies(circuit, year);
+                if (cachedStrategies.Count > 0)
+                {
+                    // Convert cached data to expected format
+                    var outList = new List<object>();
+                    
+                    foreach (var strategyData in cachedStrategies)
+                    {
+                        var stintsData = strategyData["stints"] as List<Dictionary<string, object>>;
+                        var windowsData = strategyData["windows"] as List<Dictionary<string, object>>;
+                        
+                        // Build compounds array from strategy name
+                        var compounds = strategyData["strategy_name"].ToString()!.Split("->");
+                        
+                        // Convert stints to expected format
+                        var stints = new List<object>();
+                        if (stintsData != null)
+                        {
+                            foreach (var stint in stintsData)
+                            {
+                                int start = (int)stint["start"];
+                                int end = (int)stint["end"];
+                                int length = end - start + 1;
+                                
+                                stints.Add(new { 
+                                    compound = stint["compound"].ToString(), 
+                                    length = length 
+                                });
+                            }
+                        }
+                        
+                        // Convert windows to expected format
+                        var windows = new List<object>();
+                        if (windowsData != null)
+                        {
+                            foreach (var window in windowsData)
+                            {
+                                windows.Add(new { 
+                                    min = (int)window["min"], 
+                                    max = (int)window["max"],
+                                    pitTo = "" // We don't store pitTo in cache, but it's not critical for display
+                                });
+                            }
+                        }
+                        
+                        // Calculate pit laps from stints
+                        var pitLaps = new List<int>();
+                        if (stintsData != null && stintsData.Count > 1)
+                        {
+                            for (int i = 0; i < stintsData.Count - 1; i++)
+                            {
+                                pitLaps.Add((int)stintsData[i]["end"] + 1);
+                            }
+                        }
+                        
+                        outList.Add(new {
+                            compounds = compounds,
+                            stints = stints,
+                            pit_laps = pitLaps,
+                            windows = windows,
+                            best_time = strategyData["best_time"],
+                            time_spread = 0.0 // Not stored in cache
+                        });
+                    }
+                    
+                    return Ok(new { success = true, strategies = outList });
+                }
+
+                // If not cached, compute strategies
                 var keys = _cache.GetSessionKeys(circuit, year);
                 if (keys.Count == 0)
                 {
@@ -285,7 +354,8 @@ namespace F1_simulation.Controllers
 
                 var ordered = strategiesWithWindows.OrderBy(s => s.BestTime).Take(3).ToList();
 
-                var outList = new List<object>();
+                var outList2 = new List<object>();
+                var strategiesToCache = new List<Dictionary<string, object>>();
 
                 foreach (var s in ordered)
                 {
@@ -295,25 +365,40 @@ namespace F1_simulation.Controllers
                     // Compute stint lengths based on pit laps
                     var compounds = s.CompoundSequence.Split("->");
                     var stints = new List<object>();
+                    var stintsForCache = new List<Dictionary<string, object>>();
                     int currentLap = 1;
+                    int stintNumber = 1;
                     
                     for (int i = 0; i < compounds.Length; i++)
                     {
                         int stintLength;
+                        int stintEnd;
+                        int stintStart = currentLap;
+                        
                         if (i < pitLaps.Count)
                         {
                             // Pit on lap pitLaps[i]: complete lap pitLaps[i]-1 on current tyres, 
                             // pit during lap pitLaps[i], start lap pitLaps[i] on new tyres
                             stintLength = pitLaps[i] - currentLap;
+                            stintEnd = pitLaps[i] - 1;
                             currentLap = pitLaps[i];
                         }
                         else
                         {
                             // Final stint goes to the end
                             stintLength = raceLength - currentLap + 1;
+                            stintEnd = raceLength;
                         }
 
                         stints.Add(new { compound = compounds[i], length = stintLength });
+                        stintsForCache.Add(new Dictionary<string, object>
+                        {
+                            ["stint_number"] = stintNumber,
+                            ["compound"] = compounds[i],
+                            ["start"] = stintStart,
+                            ["end"] = stintEnd
+                        });
+                        stintNumber++;
                     }
 
                     // Build pit windows list
@@ -322,8 +407,14 @@ namespace F1_simulation.Controllers
                         max = w.MaxLap, 
                         pitTo = w.PitTo.ToString() 
                     }).ToList();
+                    
+                    var windowsForCache = s.PitWindowRanges.Select(w => new Dictionary<string, object>
+                    {
+                        ["min"] = w.MinLap,
+                        ["max"] = w.MaxLap
+                    }).ToList();
 
-                    outList.Add(new {
+                    outList2.Add(new {
                         compounds = compounds,
                         stints = stints,
                         pit_laps = pitLaps,
@@ -331,9 +422,24 @@ namespace F1_simulation.Controllers
                         best_time = s.BestTime,
                         time_spread = s.TimeSpread
                     });
+                    
+                    // Prepare data for caching
+                    strategiesToCache.Add(new Dictionary<string, object>
+                    {
+                        ["strategy_name"] = s.CompoundSequence,
+                        ["best_time"] = s.BestTime,
+                        ["stints"] = stintsForCache,
+                        ["windows"] = windowsForCache
+                    });
                 }
 
-                return Ok(new { success = true, strategies = outList });
+                // Cache the strategies
+                if (strategiesToCache.Count > 0)
+                {
+                    _cache.AddTopStrategies(circuit, year, strategiesToCache);
+                }
+
+                return Ok(new { success = true, strategies = outList2 });
             }
             catch (Exception ex)
             {

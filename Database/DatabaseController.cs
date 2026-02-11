@@ -472,6 +472,207 @@ namespace F1_simulation.Database
             }
         }
 
+        // Top strategies cache methods
+        public List<Dictionary<string, object>> GetTopStrategies(string circuit, int year)
+        {
+            List<Dictionary<string, object>> strategies = [];
+            using (MySqlConnection conn = new MySqlConnection(_connection))
+            {
+                conn.Open();
+                string query = @"
+                SELECT ts.StrategyID, ts.StrategyName, ts.ExpectedTotalTime, ts.`Rank`
+                FROM COUNTRIES c 
+                JOIN RACES r
+                ON r.countryID = c.countryID
+                JOIN TopStrategies ts
+                ON ts.raceID = r.raceID
+                WHERE circuitShortName = @circuitName AND year = @year
+                ORDER BY ts.`Rank`
+                ";
+                using (MySqlCommand cmd = new MySqlCommand(query, conn))
+                {
+                    cmd.Parameters.AddWithValue("@circuitName", circuit);
+                    cmd.Parameters.AddWithValue("@year", year);
+
+                    using (MySqlDataReader reader = cmd.ExecuteReader())
+                    {
+                        while(reader.Read())
+                        {
+                            int strategyId = Convert.ToInt32(reader["StrategyID"]);
+                            var entry = new Dictionary<string, object>
+                            {
+                                ["strategy_id"] = strategyId,
+                                ["strategy_name"] = reader["StrategyName"].ToString()!,
+                                ["best_time"] = Convert.ToDouble(reader["ExpectedTotalTime"]),
+                                ["rank"] = Convert.ToInt32(reader["Rank"]),
+                                ["stints"] = new List<Dictionary<string, object>>(),
+                                ["windows"] = new List<Dictionary<string, object>>()
+                            };
+                            strategies.Add(entry);
+                        }
+                    }
+                }
+
+                // Now fetch stints and windows for each strategy
+                foreach (var strategy in strategies)
+                {
+                    int strategyId = (int)strategy["strategy_id"];
+                    
+                    // Get stints
+                    string stintQuery = @"
+                    SELECT StintNumber, Compound, Start, End
+                    FROM StrategyStints
+                    WHERE StrategyID = @strategyId
+                    ORDER BY StintNumber";
+                    
+                    var stints = new List<Dictionary<string, object>>();
+                    using (MySqlCommand cmd = new MySqlCommand(stintQuery, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@strategyId", strategyId);
+                        using (MySqlDataReader reader = cmd.ExecuteReader())
+                        {
+                            while(reader.Read())
+                            {
+                                stints.Add(new Dictionary<string, object>
+                                {
+                                    ["stint_number"] = Convert.ToInt32(reader["StintNumber"]),
+                                    ["compound"] = reader["Compound"].ToString()!,
+                                    ["start"] = Convert.ToInt32(reader["Start"]),
+                                    ["end"] = Convert.ToInt32(reader["End"])
+                                });
+                            }
+                        }
+                    }
+                    strategy["stints"] = stints;
+
+                    // Get windows
+                    string windowQuery = @"
+                    SELECT WindowStart, WindowEnd
+                    FROM StrategyWindows
+                    WHERE StrategyID = @strategyId
+                    ORDER BY WindowStart";
+                    
+                    var windows = new List<Dictionary<string, object>>();
+                    using (MySqlCommand cmd = new MySqlCommand(windowQuery, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@strategyId", strategyId);
+                        using (MySqlDataReader reader = cmd.ExecuteReader())
+                        {
+                            while(reader.Read())
+                            {
+                                windows.Add(new Dictionary<string, object>
+                                {
+                                    ["min"] = Convert.ToInt32(reader["WindowStart"]),
+                                    ["max"] = Convert.ToInt32(reader["WindowEnd"])
+                                });
+                            }
+                        }
+                    }
+                    strategy["windows"] = windows;
+                }
+            }
+            return strategies;
+        }
+
+        public void AddTopStrategies(string circuit, int year, List<Dictionary<string, object>> strategiesData)
+        {
+            int raceid = 0;
+            using (MySqlConnection conn = new MySqlConnection(_connection))
+            {
+                conn.Open();
+                string query = @"
+                SELECT raceID
+                FROM COUNTRIES c 
+                JOIN RACES r
+                ON r.countryID = c.countryID
+                WHERE circuitShortName = @circuitName AND year = @year
+                ";
+                using (MySqlCommand cmd = new MySqlCommand(query, conn))
+                {
+                    cmd.Parameters.AddWithValue("@circuitName", circuit);
+                    cmd.Parameters.AddWithValue("@year", year);
+
+                    using (MySqlDataReader reader = cmd.ExecuteReader())
+                    {
+                        while(reader.Read())
+                        {
+                            raceid = Convert.ToInt32(reader["raceID"]);
+                        }
+                    }
+                }
+                
+                if (raceid == 0)
+                {
+                    Console.WriteLine($"Warning: No race found for circuit '{circuit}' and year {year}. Skipping top strategies cache.");
+                    return;
+                }
+
+                int rank = 1;
+                foreach (var strategyData in strategiesData)
+                {
+                    // Insert the strategy
+                    string insertStrategyQuery = @"
+                    INSERT IGNORE INTO TopStrategies (raceID, StrategyName, ExpectedTotalTime, `Rank`)
+                    VALUES (@raceID, @strategyName, @expectedTotalTime, @rank);
+                    SELECT LAST_INSERT_ID();"; // Get the StrategyID that I just inserted
+                    
+                    int strategyId;
+                    using (MySqlCommand cmd = new MySqlCommand(insertStrategyQuery, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@raceID", raceid);
+                        cmd.Parameters.AddWithValue("@strategyName", strategyData["strategy_name"].ToString());
+                        cmd.Parameters.AddWithValue("@expectedTotalTime", strategyData["best_time"]);
+                        cmd.Parameters.AddWithValue("@rank", rank);
+                        
+                        var result = cmd.ExecuteScalar();
+                        strategyId = Convert.ToInt32(result);
+                    }
+
+                    // Insert stints
+                    if (strategyData.ContainsKey("stints") && strategyData["stints"] is List<Dictionary<string, object>> stints)
+                    {
+                        foreach (var stint in stints)
+                        {
+                            string insertStintQuery = @"
+                            INSERT IGNORE INTO StrategyStints (StrategyID, StintNumber, Compound, Start, End)
+                            VALUES (@strategyID, @stintNumber, @compound, @start, @end)";
+                            
+                            using (MySqlCommand cmd = new MySqlCommand(insertStintQuery, conn))
+                            {
+                                cmd.Parameters.AddWithValue("@strategyID", strategyId);
+                                cmd.Parameters.AddWithValue("@stintNumber", stint["stint_number"]);
+                                cmd.Parameters.AddWithValue("@compound", stint["compound"].ToString());
+                                cmd.Parameters.AddWithValue("@start", stint["start"]);
+                                cmd.Parameters.AddWithValue("@end", stint["end"]);
+                                cmd.ExecuteNonQuery();
+                            }
+                        }
+                    }
+
+                    // Insert windows
+                    if (strategyData.ContainsKey("windows") && strategyData["windows"] is List<Dictionary<string, object>> windows)
+                    {
+                        foreach (var window in windows)
+                        {
+                            string insertWindowQuery = @"
+                            INSERT IGNORE INTO StrategyWindows (StrategyID, WindowStart, WindowEnd)
+                            VALUES (@strategyID, @windowStart, @windowEnd)";
+                            
+                            using (MySqlCommand cmd = new MySqlCommand(insertWindowQuery, conn))
+                            {
+                                cmd.Parameters.AddWithValue("@strategyID", strategyId);
+                                cmd.Parameters.AddWithValue("@windowStart", window["min"]);
+                                cmd.Parameters.AddWithValue("@windowEnd", window["max"]);
+                                cmd.ExecuteNonQuery();
+                            }
+                        }
+                    }
+
+                    rank++;
+                }
+            }
+        }
+
         // Helper method to get or create a driver by driver number
         private int GetDriver(MySqlConnection conn, int driverNumber)
         {

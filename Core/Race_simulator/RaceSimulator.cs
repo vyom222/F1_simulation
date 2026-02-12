@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using F1_simulation.Core.Strategy_solver;
 using F1_simulation.Core.Tyres;
 using System.Numerics;
+using F1_simulation.Database;
 
 namespace F1_simulation.Core.Race_simulator
 {
@@ -16,7 +17,7 @@ namespace F1_simulation.Core.Race_simulator
         public static async Task RunQualifyingSimulation(string circuit, int year)
         {
             // Get qualifying data from the API
-            var qualiData = await GetQualifyingData(circuit, year);
+            var qualiData = await GetQualifyingData(circuit, year, null);
             if (qualiData.HasValue)
             {
                 PrintQualifyingResults(qualiData.Value);
@@ -27,10 +28,30 @@ namespace F1_simulation.Core.Race_simulator
             }
         }
 
-        public static async Task<JsonElement?> GetQualifyingData(string circuit, int year)
+        public static async Task<JsonElement?> GetQualifyingData(string circuit, int year, F1_cache? cache = null)
         {
             try
             {
+                // Check cache first if available
+                if (cache != null)
+                {
+                    var cachedQualifying = cache.GetQualifying(circuit, year);
+                    var cachedRacePace = cache.GetRacePace(circuit, year);
+                    
+                    if (cachedQualifying.Count > 0 && cachedRacePace.Count > 0)
+                    {
+                        // Build JSON structure from cached data
+                        var result = new
+                        {
+                            qualifying = cachedQualifying,
+                            race_pace = cachedRacePace
+                        };
+                        
+                        var jsonString = JsonSerializer.Serialize(result);
+                        return JsonDocument.Parse(jsonString).RootElement;
+                    }
+                }
+
                 using var client = new HttpClient();
                 client.BaseAddress = new Uri("http://127.0.0.1:8000");
 
@@ -79,7 +100,48 @@ namespace F1_simulation.Core.Race_simulator
                 }
 
                 var responseString = await response.Content.ReadAsStringAsync();
-                return JsonDocument.Parse(responseString).RootElement;
+                var jsonElement = JsonDocument.Parse(responseString).RootElement;
+                
+                // Cache the data if cache is available
+                if (cache != null)
+                {
+                    // Save session keys
+                    cache.AddSessions(circuit, year, sessionKeys);
+                    
+                    // Parse and save qualifying data
+                    if (jsonElement.TryGetProperty("qualifying", out var qualifying))
+                    {
+                        var qualifyingList = new List<Dictionary<string, object>>();
+                        foreach (var q in qualifying.EnumerateArray())
+                        {
+                            qualifyingList.Add(new Dictionary<string, object>
+                            {
+                                ["position"] = q.GetProperty("position").GetInt32(),
+                                ["driver_number"] = q.GetProperty("driver_number").GetInt32(),
+                                ["gap"] = q.GetProperty("gap").GetString() ?? "0.000"
+                            });
+                        }
+                        cache.AddQualifying(circuit, year, qualifyingList);
+                    }
+                    
+                    // Parse and save race pace data
+                    if (jsonElement.TryGetProperty("race_pace", out var racePace))
+                    {
+                        var racePaceList = new List<Dictionary<string, object>>();
+                        foreach (var rp in racePace.EnumerateArray())
+                        {
+                            racePaceList.Add(new Dictionary<string, object>
+                            {
+                                ["position"] = rp.GetProperty("position").GetInt32(),
+                                ["driver_number"] = rp.GetProperty("driver_number").GetInt32(),
+                                ["gap_to_fastest"] = rp.GetProperty("gap_to_fastest").GetString() ?? "0.000"
+                            });
+                        }
+                        cache.AddRacePace(circuit, year, racePaceList);
+                    }
+                }
+                
+                return jsonElement;
             }
             catch (Exception ex)
             {
@@ -149,10 +211,11 @@ namespace F1_simulation.Core.Race_simulator
             IEnumerable<Tyre> tyres,
             int raceLength = 66,
             double pitLoss = 25.0,
-            double trafficPenalty = 0.5) // seconds lost when stuck behind another car
+            double trafficPenalty = 0.5, // seconds lost when stuck behind another car
+            F1_cache? cache = null) 
         {
             // Get qualifying and race pace data
-            var driverData = await GetQualifyingData(circuit, year);
+            var driverData = await GetQualifyingData(circuit, year, cache);
             if (!driverData.HasValue)
             {
                 throw new Exception("Failed to get driver data from API");

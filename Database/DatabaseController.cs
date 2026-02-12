@@ -802,5 +802,32 @@ namespace F1_simulation.Database
             }
             return driverTeams;
         }
+
+        // Check if a race exists for a given circuit and year
+        public bool RaceExists(string circuit, int year)
+        {
+            using (MySqlConnection conn = new MySqlConnection(_connection))
+            {
+                conn.Open();
+                string query = @"
+                SELECT COUNT(*) as count
+                FROM COUNTRIES c 
+                JOIN RACES r ON r.countryID = c.countryID
+                WHERE circuitShortName = @circuitName AND year = @year";
+                using (MySqlCommand cmd = new MySqlCommand(query, conn))
+                {
+                    cmd.Parameters.AddWithValue("@circuitName", circuit);
+                    cmd.Parameters.AddWithValue("@year", year);
+                    using (MySqlDataReader reader = cmd.ExecuteReader())
+                    {
+                        if (reader.Read())
+                        {
+                            return Convert.ToInt32(reader["count"]) > 0;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
     }
 }

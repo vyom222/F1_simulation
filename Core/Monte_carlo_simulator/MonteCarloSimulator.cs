@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using F1_simulation.Core.Race_simulator;
 using F1_simulation.Core.Strategy_solver;
 using F1_simulation.Core.Tyres;
+using F1_simulation.Database;
 
 namespace F1_simulation.Core.Monte_carlo_simulator
 {
@@ -45,14 +46,15 @@ namespace F1_simulation.Core.Monte_carlo_simulator
             int raceLength = 66,
             double pitLoss = 25.0,
             double trafficPenalty = 0.5,
-            int numSimulations = 1000)
+            int numSimulations = 1000,
+            F1_cache? cache = null)
         {
             var positionCounts = new Dictionary<int, Dictionary<int, int>>(); // driver -> position -> count
             var allFinalPositions = new List<List<RaceSimulator.DriverState>>();
             var allRaceInfos = new List<RaceInfo>();
 
             // Get initial driver data (qualifying and race pace)
-            var driverData = await RaceSimulator.GetQualifyingData(circuit, year);
+            var driverData = await RaceSimulator.GetQualifyingData(circuit, year, cache);
             if (!driverData.HasValue)
             {
                 throw new Exception("Failed to get driver data from API");

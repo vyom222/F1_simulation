@@ -92,10 +92,12 @@ function loadTyreCurves() {
     fetch(url)
         .then(response => {
             console.log('Response status:', response.status);
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.json();
+            return response.json().then(data => {
+                if (!response.ok) {
+                    throw new Error(data.error || `HTTP error! status: ${response.status}`);
+                }
+                return data;
+            });
         })
         .then(data => {
             console.log('Received data:', data);
@@ -311,6 +313,11 @@ async function loadStrats(){
             throw new Error(`Invalid JSON response: ${e.message} — body truncated: ${text.substring(0,200)}`);
         }
 
+        // Check for error response first
+        if (data.error) {
+            throw new Error(data.error);
+        }
+
         if (!data.success || !data.strategies) {
             throw new Error(data.error || 'No strategies returned');
         }
@@ -424,7 +431,12 @@ async function loadStrats(){
         lastError = err;
         clearTimeout(timeoutId);
         if (window.currentStratController) { window.currentStratController = null; }
-
+        
+        // Display error to user
+        status.textContent = `Error: ${err.message}`;
+        status.className = 'status-message status-error';
+        status.style.display = 'block';
+        container.innerHTML = '';
     }
     button.disabled = false;
 }
@@ -450,7 +462,12 @@ function loadQuali() {
     const url = `http://localhost:5000/api/solver/qualifying?circuit=${circuit}&year=${year}`;
 
     fetch(url)
-        .then(response => response.json())
+        .then(response => response.json().then(data => {
+            if (!response.ok) {
+                throw new Error(data.error || `HTTP error! status: ${response.status}`);
+            }
+            return data;
+        }))
         .then(data => {
             const list = (data.qualifying && data.qualifying.qualifying) || [];
             if (!data.success || !Array.isArray(list) || list.length === 0) {
@@ -575,7 +592,12 @@ function loadRacePace() {
     const url = `http://localhost:5000/api/solver/race-pace?circuit=${circuit}&year=${year}`;
 
     fetch(url)
-        .then(response => response.json())
+        .then(response => response.json().then(data => {
+            if (!response.ok) {
+                throw new Error(data.error || `HTTP error! status: ${response.status}`);
+            }
+            return data;
+        }))
         .then(data => {
             const raw = data.racePace || [];
             let list = [];

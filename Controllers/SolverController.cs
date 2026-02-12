@@ -95,6 +95,12 @@ namespace F1_simulation.Controllers
         {
             try
             {
+                // Check if race exists for this circuit and year
+                if (!_cache.RaceExists(circuit, year))
+                {
+                    return NotFound(new { error = $"No {year} {circuit} Grand Prix" });
+                }
+
                 // Check cache for session keys first
                 var cachedKeys = _cache.GetSessionKeys(circuit, year);
                 List<int> keys;
@@ -130,6 +136,12 @@ namespace F1_simulation.Controllers
         {
             try
             {
+                // Check if race exists for this circuit and year
+                if (!_cache.RaceExists(circuit, year))
+                {
+                    return NotFound(new { error = $"No {year} {circuit} Grand Prix" });
+                }
+
                 // Check cache for tyre curves first
                 var cachedCurves = _cache.GetTyreCurves(circuit, year);
                 
@@ -187,6 +199,12 @@ namespace F1_simulation.Controllers
         {
             try
             {
+                // Check if race exists for this circuit and year
+                if (!_cache.RaceExists(circuit, year))
+                {
+                    return NotFound(new { error = $"No {year} {circuit} Grand Prix" });
+                }
+
                 // Check cache for session keys
                 var keys = _cache.GetSessionKeys(circuit, year);
                 if (keys.Count == 0)
@@ -250,7 +268,8 @@ namespace F1_simulation.Controllers
                     raceLength: laps,
                     pitLoss: 25.0,
                     trafficPenalty: 0.5,
-                    numSimulations: numSimulations
+                    numSimulations: numSimulations,
+                    cache: _cache
                 );
 
                 // Convert PositionCounts to a serializable structure
@@ -279,6 +298,12 @@ namespace F1_simulation.Controllers
         {
             try
             {
+                // Check if race exists for this circuit and year
+                if (!_cache.RaceExists(circuit, year))
+                {
+                    return NotFound(new { error = $"No {year} {circuit} Grand Prix" });
+                }
+
                 // Check cache for top strategies
                 var cachedStrategies = _cache.GetTopStrategies(circuit, year);
                 if (cachedStrategies.Count > 0)
@@ -533,6 +558,12 @@ namespace F1_simulation.Controllers
         {
             try
             {
+                // Check if race exists for this circuit and year
+                if (!_cache.RaceExists(circuit, year))
+                {
+                    return NotFound(new { error = $"No {year} {circuit} Grand Prix" });
+                }
+
                 // Check cache for qualifying data
                 var cachedQualifying = _cache.GetQualifying(circuit, year);
                 if (cachedQualifying.Count > 0)
@@ -591,6 +622,12 @@ namespace F1_simulation.Controllers
         {
             try
             {
+                // Check if race exists for this circuit and year
+                if (!_cache.RaceExists(circuit, year))
+                {
+                    return NotFound(new { error = $"No {year} {circuit} Grand Prix" });
+                }
+
                 // Check cache for race pace data
                 var cachedRacePace = _cache.GetRacePace(circuit, year);
                 if (cachedRacePace.Count > 0)
@@ -649,6 +686,12 @@ namespace F1_simulation.Controllers
         {
             try
             {
+                // Check if race exists for this circuit and year
+                if (!_cache.RaceExists(circuit, year))
+                {
+                    return NotFound(new { error = $"No {year} {circuit} Grand Prix" });
+                }
+
                 // Check cache for race simulation data
                 var cachedRaceSimulation = _cache.GetRaceSimulation(circuit, year);
                 if (cachedRaceSimulation.Count > 0)
@@ -734,7 +777,7 @@ namespace F1_simulation.Controllers
 
                 // Run race simulation
                 int laps = _cache.GetLaps(circuit);
-                var raceResult = await RaceSimulator.SimulateRace(circuit, year, tyres, laps);
+                var raceResult = await RaceSimulator.SimulateRace(circuit, year, tyres, laps, cache: _cache);
 
                 // Build race results data
                 var raceResults2 = new List<object>();

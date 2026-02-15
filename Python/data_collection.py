@@ -49,7 +49,7 @@ DEGRADATION_FACTOR = 0.5  # Not used anymore, but can be added for a more profes
 TARGET_SOFT_SLOPE = 0.15      # Target degradation rate for soft tyres (seconds per lap) - realistic: 0.1-0.225
 TARGET_MEDIUM_SLOPE = 0.13    # Target for medium tyres - realistic: 0.1-0.17
 TARGET_HARD_SLOPE = 0.08      # Target for hard tyres - realistic: 0.05-0.12
-INTERCEPT_DIFF = 0.6          # Minimum difference in first lap pace between tyre compounds
+INTERCEPT_DIFF = 0.45          # Minimum difference in first lap pace between tyre compounds
 
 
 def infer_missing_tyre(available_tyres):

@@ -45,11 +45,11 @@ COMPOUNDS = ["SOFT", "MEDIUM", "HARD"]
 SECONDS_SAVED_PER_LAP_FUEL = 0.045
 
 # Tyre degradation parameters 
-DEGRADATION_FACTOR = 0.5
-TARGET_SOFT_SLOPE = 0.1 * DEGRADATION_FACTOR  # Target degradation rate for soft tyres (seconds per lap)
-TARGET_MEDIUM_SLOPE = 0.075 * DEGRADATION_FACTOR 
-TARGET_HARD_SLOPE = 0.05 * DEGRADATION_FACTOR
-INTERCEPT_DIFF = 0.3         # Minimum difference in first lap pace between tyre compounds
+DEGRADATION_FACTOR = 0.5  # Not used anymore, but can be added for a more professional use of this software (considering one race at a time)
+TARGET_SOFT_SLOPE = 0.15      # Target degradation rate for soft tyres (seconds per lap) - realistic: 0.1-0.225
+TARGET_MEDIUM_SLOPE = 0.13    # Target for medium tyres - realistic: 0.1-0.17
+TARGET_HARD_SLOPE = 0.08      # Target for hard tyres - realistic: 0.05-0.12
+INTERCEPT_DIFF = 0.6          # Minimum difference in first lap pace between tyre compounds
 
 
 def infer_missing_tyre(available_tyres):
@@ -130,8 +130,8 @@ def fit_tyres_jointly(data_dict):
         
         model = HuberRegressor(epsilon=1.35, max_iter=200).fit(X, y)
         initial_params[compound] = {
-            "slope": max(0.001, model.coef_[0]),  # Ensure positive
-            "intercept": model.intercept_
+            "Slope": max(0.001, model.coef_[0]),  # Ensure positive
+            "Intercept": model.intercept_
         }
     
     # If we only have 2 compounds, infer the missing one
@@ -147,12 +147,12 @@ def fit_tyres_jointly(data_dict):
     
     # Prepare initial parameter vector
     x0 = np.array([
-        initial_params["SOFT"]["slope"],
-        initial_params["MEDIUM"]["slope"],
-        initial_params["HARD"]["slope"],
-        initial_params["SOFT"]["intercept"],
-        initial_params["MEDIUM"]["intercept"],
-        initial_params["HARD"]["intercept"]
+        initial_params["SOFT"]["Slope"],
+        initial_params["MEDIUM"]["Slope"],
+        initial_params["HARD"]["Slope"],
+        initial_params["SOFT"]["Intercept"],
+        initial_params["MEDIUM"]["Intercept"],
+        initial_params["HARD"]["Intercept"]
     ])
     
     # Objective function: minimize sum of squared residuals for all compounds
@@ -173,16 +173,16 @@ def fit_tyres_jointly(data_dict):
         
         # Penalty for deviating from target slopes (weighted by data size)
         target_slopes = [TARGET_SOFT_SLOPE, TARGET_MEDIUM_SLOPE, TARGET_HARD_SLOPE]
-        slope_penalty_weight = 100.0  # Weight for slope target penalty
+        slope_penalty_weight = 1000.0  # Increased weight to keep slopes closer to targets
         for i, target in enumerate(target_slopes):
             slope_diff = (x[i] - target) ** 2
             # Weight by inverse of data size (more data = less penalty for deviation)
             # For inferred tyres (no data), use higher penalty to stick close to target
             data_size = len(data_dict[compounds[i]]["X"])
             if data_size == 0:
-                weight = slope_penalty_weight * 2  # Higher penalty for inferred tyres
+                weight = slope_penalty_weight * 3  # Higher penalty for inferred tyres
             else:
-                weight = slope_penalty_weight / max(1, data_size / 50)
+                weight = slope_penalty_weight / max(1, data_size / 100)
             total_error += weight * slope_diff
         
         return total_error
@@ -203,36 +203,101 @@ def fit_tyres_jointly(data_dict):
     
     # Bounds: reasonable ranges for slopes and intercepts
     bounds = [
-        (0.005, 0.4),   # soft_slope (positive, max 0.4s/lap degradation)
-        (0.005, 0.4),   # med_slope
-        (0.005, 0.4),   # hard_slope
-        (50, 200),      # soft_int (lap times in seconds)
-        (50, 200),      # med_int
-        (50, 200),      # hard_int
+        (0.10, 0.225),   # soft_slope: 0.1-0.225 s/lap degradation
+        (0.08, 0.17),    # med_slope: 0.08-0.17 s/lap degradation
+        (0.05, 0.12),    # hard_slope: 0.05-0.12 s/lap degradation
+        (50, 200),       # soft_int (lap times in seconds)
+        (50, 200),       # med_int
+        (50, 200),       # hard_int
     ]
     
     try:
         result = minimize(objective, x0, method='SLSQP', bounds=bounds, constraints=constraints, options={'maxiter': 1000})
         if result.success:
-            return {
-                "SOFT": {"Slope": result.x[0], "Intercept": result.x[3]},
-                "MEDIUM": {"Slope": result.x[1], "Intercept": result.x[4]},
-                "HARD": {"Slope": result.x[2], "Intercept": result.x[5]}
-            }
-        else:
-            # If optimization fails, return initial estimates with constraints applied
-            # print(f"Warning: Joint optimization did not converge, using initial estimates with constraints")
-            return {
-                "SOFT": {"Slope": initial_params["SOFT"]["slope"], "Intercept": initial_params["SOFT"]["intercept"]},
-                "MEDIUM": {"Slope": initial_params["MEDIUM"]["slope"], "Intercept": initial_params["MEDIUM"]["intercept"]},
-                "HARD": {"Slope": initial_params["HARD"]["slope"], "Intercept": initial_params["HARD"]["intercept"]}
-            }
-    except Exception as e:
-        # print(f"Error in joint optimization: {e}, using initial estimates")
+            # Validate results - check if they're reasonable
+            soft_slope, med_slope, hard_slope = result.x[0], result.x[1], result.x[2]
+            soft_int, med_int, hard_int = result.x[3], result.x[4], result.x[5]
+            
+            # Check if slopes are within reasonable range and properly ordered
+            slopes_valid = (
+                0.10 <= soft_slope <= 0.225 and
+                0.10 <= med_slope <= 0.17 and
+                0.05 <= hard_slope <= 0.12 and
+                soft_slope > med_slope > hard_slope
+            )
+            
+            # Check if intercepts are properly ordered and reasonable (65-105 seconds typical lap time)
+            intercepts_valid = (
+                hard_int > med_int > soft_int and
+                65 <= soft_int <= 105 and
+                65 <= med_int <= 105 and
+                65 <= hard_int <= 105
+            )
+            
+            if slopes_valid and intercepts_valid:
+                return {
+                    "SOFT": {"Slope": soft_slope, "Intercept": soft_int},
+                    "MEDIUM": {"Slope": med_slope, "Intercept": med_int},
+                    "HARD": {"Slope": hard_slope, "Intercept": hard_int}
+                }
+            # If validation fails, fall through to use target-based values
+        
+        # If optimization fails or results are invalid, use target slopes with adjusted intercepts
+        # Get median lap time from available data to estimate reasonable intercept
+        avg_intercept = 90.0  # Default fallback
+        valid_intercepts = []
+        
+        for compound in available_compounds:
+            if compound in initial_params:
+                int_val = initial_params[compound]["Intercept"]
+                # Only use intercepts that are in a reasonable range
+                if 65 <= int_val <= 105:
+                    valid_intercepts.append(int_val)
+        
+        if valid_intercepts:
+            avg_intercept = sum(valid_intercepts) / len(valid_intercepts)
+        elif len(available_compounds) > 0:
+            # Estimate from median lap times in the data
+            all_lap_times = []
+            for compound in available_compounds:
+                if compound in data_dict and len(data_dict[compound]["y"]) > 0:
+                    all_lap_times.extend(data_dict[compound]["y"][:50])  # Sample first 50 laps
+            if all_lap_times:
+                avg_intercept = np.median(all_lap_times)
+                # Clamp to reasonable range
+                avg_intercept = max(65, min(105, avg_intercept))
+        
         return {
-            "SOFT": {"Slope": initial_params["SOFT"]["slope"], "Intercept": initial_params["SOFT"]["intercept"]},
-            "MEDIUM": {"Slope": initial_params["MEDIUM"]["slope"], "Intercept": initial_params["MEDIUM"]["intercept"]},
-            "HARD": {"Slope": initial_params["HARD"]["slope"], "Intercept": initial_params["HARD"]["intercept"]}
+            "SOFT": {"Slope": TARGET_SOFT_SLOPE, "Intercept": avg_intercept - INTERCEPT_DIFF},
+            "MEDIUM": {"Slope": TARGET_MEDIUM_SLOPE, "Intercept": avg_intercept},
+            "HARD": {"Slope": TARGET_HARD_SLOPE, "Intercept": avg_intercept + INTERCEPT_DIFF}
+        }
+    except Exception as e:
+        # On error, use target slopes with estimated intercepts from data
+        avg_intercept = 90.0
+        
+        # Try to get reasonable intercept from initial params
+        for compound in available_compounds:
+            if compound in initial_params:
+                int_val = initial_params[compound]["Intercept"]
+                if 65 <= int_val <= 105:
+                    avg_intercept = int_val
+                    break
+        
+        # If no valid intercept, estimate from median lap times
+        if avg_intercept == 90.0:
+            all_lap_times = []
+            for compound in available_compounds:
+                if compound in data_dict and len(data_dict[compound]["y"]) > 0:
+                    all_lap_times.extend(data_dict[compound]["y"][:50])
+            if all_lap_times:
+                avg_intercept = np.median(all_lap_times)
+                avg_intercept = max(70, min(105, avg_intercept))
+        
+        return {
+            "SOFT": {"Slope": TARGET_SOFT_SLOPE, "Intercept": avg_intercept - INTERCEPT_DIFF},
+            "MEDIUM": {"Slope": TARGET_MEDIUM_SLOPE, "Intercept": avg_intercept},
+            "HARD": {"Slope": TARGET_HARD_SLOPE, "Intercept": avg_intercept + INTERCEPT_DIFF}
         }
 
 
@@ -506,11 +571,11 @@ def get_curves(session_keys):
         # Generate curve points for plotting (0 to 31 laps)
         max_laps = 31
         curve_x = list(range(0, max_laps + 1))
-        curve_y = [lap * (slope * DEGRADATION_FACTOR) + intercept for lap in curve_x]
+        curve_y = [lap * slope + intercept for lap in curve_x]
         
         results.append({
             "Compound": compound,
-            "Slope": slope * DEGRADATION_FACTOR,
+            "Slope": slope,
             "Intercept": intercept,
             "CurveX": curve_x,
             "CurveY": curve_y

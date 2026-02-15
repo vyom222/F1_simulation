@@ -23,6 +23,15 @@ namespace F1_simulation.Controllers
             _cache = cache;
         }
 
+        private IActionResult? CheckCancelledRace(string circuit, int year)
+        {
+            if (circuit.Equals("Imola", StringComparison.OrdinalIgnoreCase) && year == 2023)
+            {
+                return BadRequest(new { error = "2023 Imola Grand Prix was cancelled" });
+            }
+            return null;
+        }
+
         [HttpGet("health")]
         public IActionResult Health()
         {
@@ -95,6 +104,9 @@ namespace F1_simulation.Controllers
         {
             try
             {
+                var cancelled = CheckCancelledRace(circuit, year);
+                if (cancelled != null) return cancelled;
+
                 // Check if race exists for this circuit and year
                 if (!_cache.RaceExists(circuit, year))
                 {
@@ -118,6 +130,12 @@ namespace F1_simulation.Controllers
                     keys = ApiKeys;
                     _cache.AddSessions(circuit, year, keys);
                 }
+
+                // Check if it's a sprint race (only 1 practice session)
+                if (keys.Count == 1)
+                {
+                    return BadRequest(new { error = $"Insufficient data: {year} {circuit} Grand Prix was a Sprint Race" });
+                }
                     
                 var driverData = await TyreModelClient.CallDriverDataAsync(keys);
                 if (driverData == null)
@@ -136,6 +154,9 @@ namespace F1_simulation.Controllers
         {
             try
             {
+                var cancelled = CheckCancelledRace(circuit, year);
+                if (cancelled != null) return cancelled;
+
                 // Check if race exists for this circuit and year
                 if (!_cache.RaceExists(circuit, year))
                 {
@@ -175,6 +196,12 @@ namespace F1_simulation.Controllers
                     
                     _cache.AddSessions(circuit, year, keys);
                 }
+
+                // Check if it's a sprint race (only 1 practice session)
+                if (keys.Count == 1)
+                {
+                    return BadRequest(new { error = $"Insufficient data: {year} {circuit} Grand Prix was a Sprint Race" });
+                }
                     
                 var apiResults = await TyreModelClient.CallTyreModelAsync(keys);
                 if (apiResults == null)
@@ -199,6 +226,9 @@ namespace F1_simulation.Controllers
         {
             try
             {
+                var cancelled = CheckCancelledRace(circuit, year);
+                if (cancelled != null) return cancelled;
+
                 // Check if race exists for this circuit and year
                 if (!_cache.RaceExists(circuit, year))
                 {
@@ -214,6 +244,12 @@ namespace F1_simulation.Controllers
                         return NotFound(new { error = "No session keys found for the specified circuit and year" });
                     
                     _cache.AddSessions(circuit, year, keys);
+                }
+
+                // Check if it's a sprint race (only 1 practice session)
+                if (keys.Count == 1)
+                {
+                    return BadRequest(new { error = $"Insufficient data: {year} {circuit} Grand Prix was a Sprint Race" });
                 }
 
                 // Check cache for tyre curves
@@ -298,6 +334,9 @@ namespace F1_simulation.Controllers
         {
             try
             {
+                var cancelled = CheckCancelledRace(circuit, year);
+                if (cancelled != null) return cancelled;
+
                 // Check if race exists for this circuit and year
                 if (!_cache.RaceExists(circuit, year))
                 {
@@ -382,6 +421,12 @@ namespace F1_simulation.Controllers
                         return NotFound(new { error = "No session keys found for the specified circuit and year" });
                     
                     _cache.AddSessions(circuit, year, keys);
+                }
+
+                // Check if it's a sprint race (only 1 practice session)
+                if (keys.Count == 1)
+                {
+                    return BadRequest(new { error = $"Insufficient data: {year} {circuit} Grand Prix was a Sprint Race" });
                 }
 
                 // Check cache for tyre curves
@@ -558,6 +603,9 @@ namespace F1_simulation.Controllers
         {
             try
             {
+                var cancelled = CheckCancelledRace(circuit, year);
+                if (cancelled != null) return cancelled;
+
                 // Check if race exists for this circuit and year
                 if (!_cache.RaceExists(circuit, year))
                 {
@@ -622,6 +670,9 @@ namespace F1_simulation.Controllers
         {
             try
             {
+                var cancelled = CheckCancelledRace(circuit, year);
+                if (cancelled != null) return cancelled;
+
                 // Check if race exists for this circuit and year
                 if (!_cache.RaceExists(circuit, year))
                 {
@@ -686,6 +737,9 @@ namespace F1_simulation.Controllers
         {
             try
             {
+                var cancelled = CheckCancelledRace(circuit, year);
+                if (cancelled != null) return cancelled;
+
                 // Check if race exists for this circuit and year
                 if (!_cache.RaceExists(circuit, year))
                 {
@@ -733,7 +787,11 @@ namespace F1_simulation.Controllers
                     
                     _cache.AddSessions(circuit, year, keys);
                 }
-
+                // Check if it's a sprint race (only 1 practice session)
+                if (keys.Count == 1)
+                {
+                    return BadRequest(new { error = $"Insufficient data: {year} {circuit} Grand Prix was a Sprint Race" });
+                }
                 // Check cache for tyre curves
                 var cachedCurves = _cache.GetTyreCurves(circuit, year);
                 List<TyreModelClient.TyreResult> results;

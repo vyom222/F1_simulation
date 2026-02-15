@@ -10,6 +10,9 @@ using F1_simulation.Core.Tyres;
 using System.Numerics;
 using F1_simulation.Database;
 
+// CHECK THE DEFAULT SORTA CURVES WHEN THEY ARE CREATED e.g MONACO 23, MIAMI 23, BAKU 23
+// IMOLA DIDN'T HAPPEN
+
 namespace F1_simulation.Core.Race_simulator
 {
     public class RaceSimulator

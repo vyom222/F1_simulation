@@ -8,6 +8,12 @@ using Microsoft.Extensions.Primitives;
 
 public static class TyreModelClient
 {
+    public class ErrorResponse
+    {
+        [JsonPropertyName("error")]
+        public string? Error { get; set; }
+    }
+
     public class TyreRequest
     {
         [JsonPropertyName("session_keys")]
@@ -90,7 +96,12 @@ public static class TyreModelClient
             content
         );
 
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+        {
+            string errorJson = await response.Content.ReadAsStringAsync();
+            var errorResponse = JsonSerializer.Deserialize<ErrorResponse>(errorJson);
+            throw new Exception(errorResponse?.Error ?? "Unknown error from tyre model API");
+        }
 
         string responseJson = await response.Content.ReadAsStringAsync();
 
@@ -116,7 +127,12 @@ public static class TyreModelClient
             content
         );
 
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+        {
+            string errorJson = await response.Content.ReadAsStringAsync();
+            var errorResponse = JsonSerializer.Deserialize<ErrorResponse>(errorJson);
+            throw new Exception(errorResponse?.Error ?? "Unknown error from driver data API");
+        }
 
         string responseJson = await response.Content.ReadAsStringAsync();
 
@@ -140,7 +156,12 @@ public static class TyreModelClient
             content
         );
 
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+        {
+            string errorJson = await response.Content.ReadAsStringAsync();
+            var errorResponse = JsonSerializer.Deserialize<ErrorResponse>(errorJson);
+            throw new Exception(errorResponse?.Error ?? "Unknown error from session keys API");
+        }
 
         string responseJson = await response.Content.ReadAsStringAsync();
 

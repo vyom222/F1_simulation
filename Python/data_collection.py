@@ -242,11 +242,28 @@ def get_sessions(circuit, year):
     f"circuit_short_name={circuit}&year={year}&session_type={SESSION_TYPE}"
     )
     sessions = fetch_and_cache(sessions_url)
-    session_keys = [s["session_key"] for s in sessions]
+    
+    # Filter out testing sessions (Day 1, Day 2, Day 3, etc.)
+    # Only include actual race weekend practice sessions
+    race_weekend_sessions = [
+        s for s in sessions 
+        if s.get("session_name", "").startswith("Practice")
+    ]
+    
+    session_keys = [s["session_key"] for s in race_weekend_sessions]
+    
+    # Check if it's a sprint race (only 1 session)
+    if len(session_keys) == 1:
+        raise ValueError(f"Insufficient data: {year} {circuit} Grand Prix was a Sprint Race")
+    
     return session_keys
 
 
 def get_curves(session_keys):
+    # Check if it's a sprint race (only 1 session)
+    if len(session_keys) == 1:
+        raise ValueError("Insufficient data: Sprint Race")
+    
     results = []
     results_dict = {}  # Store results by compound for constraint enforcement
 
@@ -503,18 +520,20 @@ def get_curves(session_keys):
 
 
 def get_driver_data(sessions_key):
+    # Check if it's a sprint race (only 1 session)
+    if len(sessions_key) == 1:
+        raise ValueError("Insufficient data: Sprint Race")
 
-    # QUALIFYING: Use FP3 for quali simulation
-    if len(sessions_key)>=3:
-        quali_key = sessions_key[2]  # FP3
-    else:
-        quali_key = sessions_key[0] # Could be a sprint race so take FP1
-    quali_laps_url = f"https://api.openf1.org/v1/laps?session_key={quali_key}"
-    quali_laps = fetch_and_cache(
-        quali_laps_url
-    )
+    # QUALIFYING: Use fastest lap from FP2 and FP3 only
+    quali_laps = []
+    # Use sessions at index 1 and 2 (FP2 and FP3)
+    quali_sessions = sessions_key[1:] if len(sessions_key) >= 3 else sessions_key
+    for session_key in quali_sessions:
+        quali_laps_url = f"https://api.openf1.org/v1/laps?session_key={session_key}"
+        session_laps = fetch_and_cache(quali_laps_url)
+        quali_laps.extend(session_laps)
 
-    # Process qualifying data
+    # Process qualifying data - find fastest lap for each driver across all sessions
     driver_times = {}
     for lap in quali_laps:
         if lap.get("lap_duration") and lap.get("driver_number"):

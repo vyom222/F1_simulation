@@ -86,6 +86,10 @@ function loadTyreCurves() {
     button.disabled = true;
     showStatus('Loading tyre curves...', 'loading');
 
+    // Clear previous chart immediately
+    if (window.tyreCurveChart) { window.tyreCurveChart.destroy(); window.tyreCurveChart = null; }
+    globalTyreCurves = null;
+
     const url = `http://localhost:5000/api/solver/tyre-curves?circuit=${circuit}&year=${year}`;
     console.log('Fetching from:', url);
 
@@ -110,14 +114,20 @@ function loadTyreCurves() {
                 showStatus('Tyre curves loaded successfully', 'success');
             } else if (data.error) {
                 console.error('API error:', data.error);
+                if (window.tyreCurveChart) { window.tyreCurveChart.destroy(); window.tyreCurveChart = null; }
+                globalTyreCurves = null;
                 showStatus(`Error: ${data.error}`, 'error');
             } else {
                 console.error('Invalid data structure:', data);
+                if (window.tyreCurveChart) { window.tyreCurveChart.destroy(); window.tyreCurveChart = null; }
+                globalTyreCurves = null;
                 showStatus('Failed to load tyre curves - no data received', 'error');
             }
         })
         .catch(error => {
             console.error('Fetch error:', error);
+            if (window.tyreCurveChart) { window.tyreCurveChart.destroy(); window.tyreCurveChart = null; }
+            globalTyreCurves = null;
             showStatus(`Error: ${error.message}`, 'error');
         })
         .finally(() => {
@@ -278,6 +288,10 @@ async function loadStrats(){
     status.className = 'status-message status-loading';
     status.style.display = 'block';
 
+    // Clear previous strategies immediately
+    container.innerHTML = '';
+    globalBestStrategy = null;
+
     const url = `http://localhost:5000/api/solver/top-strategies?circuit=${circuit}&year=${year}`
 
 
@@ -432,7 +446,8 @@ async function loadStrats(){
         clearTimeout(timeoutId);
         if (window.currentStratController) { window.currentStratController = null; }
         
-        // Display error to user
+        // Display error to user and clear stale strategy data
+        globalBestStrategy = null;
         status.textContent = `Error: ${err.message}`;
         status.className = 'status-message status-error';
         status.style.display = 'block';
@@ -459,6 +474,9 @@ function loadQuali() {
     status.className = 'status-message status-loading';
     status.style.display = 'block';
 
+    // Clear previous chart immediately
+    if (window._qualifyingChartInstance) { window._qualifyingChartInstance.destroy(); window._qualifyingChartInstance = null; }
+
     const url = `http://localhost:5000/api/solver/qualifying?circuit=${circuit}&year=${year}`;
 
     fetch(url)
@@ -471,6 +489,7 @@ function loadQuali() {
         .then(data => {
             const list = (data.qualifying && data.qualifying.qualifying) || [];
             if (!data.success || !Array.isArray(list) || list.length === 0) {
+                if (window._qualifyingChartInstance) { window._qualifyingChartInstance.destroy(); window._qualifyingChartInstance = null; }
                 status.textContent = data.error || 'No qualifying data available';
                 status.className = 'status-message status-error';
                 status.style.display = 'block';
@@ -482,6 +501,7 @@ function loadQuali() {
             status.style.display = 'block';
         })
         .catch(err => {
+            if (window._qualifyingChartInstance) { window._qualifyingChartInstance.destroy(); window._qualifyingChartInstance = null; }
             status.textContent = 'Error: ' + (err.message || err);
             status.className = 'status-message status-error';
             status.style.display = 'block';
@@ -589,6 +609,9 @@ function loadRacePace() {
     status.className = 'status-message status-loading';
     status.style.display = 'block';
 
+    // Clear previous chart immediately
+    if (window._racePaceChartInstance) { window._racePaceChartInstance.destroy(); window._racePaceChartInstance = null; }
+
     const url = `http://localhost:5000/api/solver/race-pace?circuit=${circuit}&year=${year}`;
 
     fetch(url)
@@ -605,6 +628,7 @@ function loadRacePace() {
             else if (raw) list = raw.race_pace || [];
 
             if (!data.success || !Array.isArray(list) || list.length === 0) {
+                if (window._racePaceChartInstance) { window._racePaceChartInstance.destroy(); window._racePaceChartInstance = null; }
                 status.textContent = data.error || 'No race pace data available';
                 status.className = 'status-message status-error';
                 status.style.display = 'block';
@@ -616,6 +640,7 @@ function loadRacePace() {
             status.style.display = 'block';
         })
         .catch(err => {
+            if (window._racePaceChartInstance) { window._racePaceChartInstance.destroy(); window._racePaceChartInstance = null; }
             status.textContent = 'Error: ' + (err.message || err);
             status.className = 'status-message status-error';
             status.style.display = 'block';
@@ -722,6 +747,14 @@ async function loadRaceSimulation() {
     status.className = 'status-message status-loading';
     status.style.display = 'block';
 
+    // Clear previous results immediately
+    const raceContainerPre = document.getElementById('raceResultsContainer');
+    const raceEmptyPre = document.getElementById('raceResultsEmpty');
+    const raceBodyPre = document.getElementById('raceResultsBody');
+    if (raceContainerPre) raceContainerPre.style.display = 'none';
+    if (raceEmptyPre) raceEmptyPre.style.display = 'none';
+    if (raceBodyPre) raceBodyPre.innerHTML = '';
+
     try {
         const url = `http://localhost:5000/api/solver/race-simulation?circuit=${circuit}&year=${year}&raceLength=66`;
         const resp = await fetch(url);
@@ -738,6 +771,11 @@ async function loadRaceSimulation() {
         }
     } catch (err) {
         console.error('Race simulation error', err);
+        // Clear race results table on error
+        const raceContainer = document.getElementById('raceResultsContainer');
+        const raceEmpty = document.getElementById('raceResultsEmpty');
+        if (raceContainer) raceContainer.style.display = 'none';
+        if (raceEmpty) raceEmpty.style.display = 'none';
         status.textContent = 'Error: ' + (err.message || err);
         status.className = 'status-message status-error';
     } finally {
@@ -765,6 +803,23 @@ async function loadMonteCarlo() {
     status.textContent = 'Running Monte Carlo...';
     status.className = 'status-message status-loading';
     status.style.display = 'block';
+
+    // Clear previous Monte Carlo data immediately
+    if (window._monteChart) { window._monteChart.destroy(); window._monteChart = null; }
+    const mcSelectPre = document.getElementById('mcDriverSelect');
+    if (mcSelectPre) mcSelectPre.innerHTML = '';
+    const standingsContainerPre = document.getElementById('standingsContainer');
+    if (standingsContainerPre) standingsContainerPre.style.display = 'none';
+    const standingsBodyPre = document.getElementById('standingsBody');
+    if (standingsBodyPre) standingsBodyPre.innerHTML = '';
+    const expElPre = document.getElementById('mcExpected');
+    const medianElPre = document.getElementById('mcMedian');
+    const modeElPre = document.getElementById('mcMode');
+    const pointsElPre = document.getElementById('mcPoints');
+    if (expElPre) expElPre.textContent = '-';
+    if (medianElPre) medianElPre.textContent = '-';
+    if (modeElPre) modeElPre.textContent = '-';
+    if (pointsElPre) pointsElPre.textContent = '-';
 
     try {
         const url = `http://localhost:5000/api/solver/montecarlo?circuit=${circuit}&year=${year}&numSimulations=${sims}`;
@@ -801,6 +856,20 @@ async function loadMonteCarlo() {
         status.style.display = 'block';
     } catch (err) {
         console.error('Monte Carlo error', err);
+        // Clear Monte Carlo chart, standings, and stats on error
+        if (window._monteChart) { window._monteChart.destroy(); window._monteChart = null; }
+        const mcSelect = document.getElementById('mcDriverSelect');
+        if (mcSelect) mcSelect.innerHTML = '';
+        const standingsContainer = document.getElementById('standingsContainer');
+        if (standingsContainer) standingsContainer.style.display = 'none';
+        const expEl = document.getElementById('mcExpected');
+        const medianEl = document.getElementById('mcMedian');
+        const modeEl = document.getElementById('mcMode');
+        const pointsEl = document.getElementById('mcPoints');
+        if (expEl) expEl.textContent = '-';
+        if (medianEl) medianEl.textContent = '-';
+        if (modeEl) modeEl.textContent = '-';
+        if (pointsEl) pointsEl.textContent = '-';
         status.textContent = 'Error: ' + (err.message || err);
         status.className = 'status-message status-error';
         status.style.display = 'block';

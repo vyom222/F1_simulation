@@ -15,7 +15,10 @@ class SessionRequest(BaseModel):
 # GET SESSIONS AND MAKE A FUCNTION FOR SESSIONS
 @app.post("/tyre_model")
 def tyre_model(req: TyreRequest):
-    return get_curves(req.session_keys)
+    try:
+        return get_curves(req.session_keys)
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 @app.post("/session_keys")
 def session_keys(req: SessionRequest):
@@ -28,7 +31,10 @@ def session_keys(req: SessionRequest):
 
 @app.post("/driver_data")
 def driver_data(req: TyreRequest):
-    return get_driver_data(req.session_keys)
+    try:
+        return get_driver_data(req.session_keys)
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 @app.get("/health")
 def health():

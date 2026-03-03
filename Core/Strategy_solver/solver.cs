@@ -178,11 +178,10 @@ namespace F1_simulation.Core.Strategy_solver
 
                 strategies.Add(new BasicStrategy(compoundSequence, pitStops, optimalResult.TotalTime));
                 
-                // Also explore slight variations in pit timing (±3 laps) with ACTUAL evaluation
-                // This helps create more realistic pit windows
+                // Also explore slight variations in pit timing (±5 laps), ensures pit windows don't get too large
                 if (pitStops.Count > 0) 
                 {
-                    for (int offset = -3; offset <= 3; offset++)
+                    for (int offset = -5; offset <= 5; offset++)
                     {
                         if (offset == 0) continue;
                         

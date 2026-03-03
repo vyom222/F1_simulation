@@ -139,7 +139,7 @@ def fit_tyres_jointly(data_dict):
         inferred = infer_missing_tyre(initial_params)
         if inferred:
             initial_params = inferred
-            # Add empty data for the inferred compound so optimization can proceed
+            # Add empty data for the inferred compound so optimisation can proceed
             missing_compound = [c for c in compounds if c not in available_compounds][0]
             data_dict[missing_compound] = {"X": np.array([]), "y": np.array([])}
         else:
@@ -242,7 +242,7 @@ def fit_tyres_jointly(data_dict):
                 }
             # If validation fails, fall through to use target-based values
         
-        # If optimization fails or results are invalid, use target slopes with adjusted intercepts
+        # If optimisation fails or results are invalid, use target slopes with adjusted intercepts
         # Get median lap time from available data to estimate reasonable intercept
         avg_intercept = 90.0  # Default fallback
         valid_intercepts = []
@@ -382,7 +382,7 @@ def get_curves(session_keys):
 
                     tyre_age = tyre_age_start + (lap_num - start)
 
-                    # Fuel correction (restored)
+                    # Fuel correction
                     laps_of_fuel = stint_length + 2
                     laps_completed = lap_num - start
                     remaining_fuel_laps = max(0, laps_of_fuel - laps_completed)
@@ -516,7 +516,7 @@ def get_curves(session_keys):
                 
                 intercept = model.intercept_
                 
-                # Store cleaned data for joint optimization
+                # Store cleaned data for joint optimisation
                 results_dict[compound] = {
                     "X": X,  # Store cleaned data for plotting and joint fitting
                     "y": y,
@@ -533,7 +533,7 @@ def get_curves(session_keys):
                 }
         else:
             # If compound has no data or insufficient data, still add it with empty arrays
-            # so joint optimization can infer it from the other compounds
+            # so joint optimisation can infer it from the other compounds
             results_dict[compound] = {
                 "X": np.array([]),
                 "y": np.array([]),
@@ -541,14 +541,14 @@ def get_curves(session_keys):
                 "Intercept": 0.0 
             }
 
-    # Joint optimization with physical constraints
+    # Joint optimisation with physical constraints
     # Works with 2 or 3 compounds (will infer missing one if only 2 available)
-    if len(results_dict) >= 2:  # Need at least 2 compounds to do joint optimization
+    if len(results_dict) >= 2:  # Need at least 2 compounds to do joint optimisation
         # Prepare data dict for joint fitting
         data_dict = {compound: {"X": results_dict[compound]["X"], "y": results_dict[compound]["y"]} 
                      for compound in COMPOUNDS}
         
-        # Perform joint optimization
+        # Perform joint optimisation
         joint_results = fit_tyres_jointly(data_dict)
         
         if joint_results:
@@ -557,7 +557,7 @@ def get_curves(session_keys):
                 results_dict[compound]["Slope"] = joint_results[compound]["Slope"]
                 results_dict[compound]["Intercept"] = joint_results[compound]["Intercept"]
         # else:
-        #     print("Warning: Joint optimization failed, using individual fits")
+        #     print("Warning: Joint optimisation failed, using individual fits")
     
     # Generate results for all compounds
     for compound in COMPOUNDS:
@@ -647,7 +647,6 @@ def get_driver_data(sessions_key):
             lap.get("tyre_compound") and
             lap.get("lap_number", 0) >= 1 and lap.get("lap_number", 0) <= 10):
 
-            # Basic quality filters
             lap_duration = lap["lap_duration"]
             lap_number = lap["lap_number"]
             tyre_compound = lap["tyre_compound"]
@@ -677,7 +676,6 @@ def get_driver_data(sessions_key):
 
     if len(usable_laps) < 50 or len(valid_drivers) < 5:
         # Not enough data for regression - create mock data based on all qualifying drivers
-        # print(f"DEBUG: Insufficient data for regression. Laps: {len(usable_laps)}, Drivers: {len(valid_drivers)}", file=sys.stderr)
         race_results = []
         random.seed(42)  # Reproducible results
 
@@ -861,19 +859,7 @@ def get_driver_data(sessions_key):
                         # Others show adjusted positive gaps with + prefix
                         result["gap_to_fastest"] = f"+{adjusted_gap:.3f}"
 
-    # # Debug output
-    # print(f"DEBUG: Qualifying results: {len(quali_results)} drivers", file=sys.stderr)
-    # print(f"DEBUG: Total practice laps: {len(all_practice_laps)}", file=sys.stderr)
-    # print(f"DEBUG: Usable laps for regression: {len(usable_laps)}", file=sys.stderr)
-    # print(f"DEBUG: Valid drivers (5+ laps): {len(valid_drivers)}", file=sys.stderr)
-    # print(f"DEBUG: Race pace results: {len(race_results)} drivers", file=sys.stderr)
-
     return {
         "qualifying": quali_results,
         "race_pace": race_results
     }
-
-
-# if __name__ == "__main__":
-#     curves = get_curves("Spain", 2024)
-#     print(curves)

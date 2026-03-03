@@ -10,9 +10,6 @@ using F1_simulation.Core.Tyres;
 using System.Numerics;
 using F1_simulation.Database;
 
-// CHECK THE DEFAULT SORTA CURVES WHEN THEY ARE CREATED e.g MONACO 23, MIAMI 23, BAKU 23
-// IMOLA DIDN'T HAPPEN
-
 namespace F1_simulation.Core.Race_simulator
 {
     public class RaceSimulator
@@ -231,8 +228,8 @@ namespace F1_simulation.Core.Race_simulator
             var drivers = new List<DriverState>();
             var racePaceDict = new Dictionary<int, double>();
 
-            // Create starting tyre optimizer
-            var startingTyreOptimizer = new StartingTyreOptimizer(tyres, raceLength, pitLoss);
+            var solver = new OptimalStrategy(tyres, raceLength, pitLoss);
+            var raceSolver = new RaceSolver(tyres, solver, pitLoss, horizon: 10);
 
             // Process qualifying data for starting positions
             foreach (var driver in qualifying.EnumerateArray())
@@ -240,7 +237,31 @@ namespace F1_simulation.Core.Race_simulator
                 var driverNum = driver.GetProperty("driver_number").GetInt32();
                 var position = driver.GetProperty("position").GetInt32();
 
-                var startingTyre = startingTyreOptimizer.FindOptimalStartingTyre(position);
+                 // Try each starting tyre and see which gives the best race strategy
+                var strategies = new List<(TyreType tyre, double raceTime)>();
+
+                foreach (var startingTyreOption in new[] { TyreType.Soft, TyreType.Medium, TyreType.Hard })
+                {
+                    // Create initial race state with this starting tyre
+                    var initialState = new RaceState(
+                        Tyre: startingTyreOption,
+                        TyreAge: 0,
+                        LapsRemaining: raceLength,
+                        Usage: startingTyreOption switch
+                        {
+                            TyreType.Soft => TyreUsage.Soft,
+                            TyreType.Medium => TyreUsage.Medium,
+                            TyreType.Hard => TyreUsage.Hard,
+                            _ => TyreUsage.Soft
+                        }
+                    );
+
+                    var strategy = solver.Solve(initialState);
+                    strategies.Add((startingTyreOption, strategy.TotalTime));
+                }
+
+                // Choose the tyre with the lowest race time
+                var startingTyre = strategies.OrderBy(s => s.raceTime).First().tyre;
 
                 drivers.Add(new DriverState
                 {
@@ -274,13 +295,6 @@ namespace F1_simulation.Core.Race_simulator
             // Sort by qualifying position
             drivers = drivers.OrderBy(d => d.Position).ToList();
 
-            // Create strategy solvers
-            var solver = new OptimalStrategy(tyres, raceLength, pitLoss);
-            var raceSolver = new RaceSolver(tyres, solver, pitLoss, horizon: 10);
-
-
-            // Starting tyres are already set in driver creation above
-
             // Run race simulation
             return await Task.Run(() => SimulateRaceLapByLap(drivers, solver, raceSolver, tyres.ToDictionary(t => t.Name switch
             {
@@ -307,8 +321,6 @@ namespace F1_simulation.Core.Race_simulator
 
             for (int lap = 1; lap <= raceLength; lap++)
             {
-                // Console.WriteLine($"\n=== LAP {lap} ===");
-
                 // Enable DRS from lap 2 onwards
                 currentDrivers = currentDrivers.Select(d => d with { HasDRS = lap >= 2 }).ToList();
 
@@ -391,13 +403,6 @@ namespace F1_simulation.Core.Race_simulator
                     .ToList();
 
                 lapByLapPositions.Add(new List<DriverState>(currentDrivers));
-
-                // // Print lap summary
-                // Console.WriteLine("Positions after lap:");
-                // foreach (var driver in currentDrivers.Take(5))
-                // {
-                //     Console.WriteLine($"P{driver.Position}: Driver {driver.DriverNumber} ({driver.TotalTime:F1}s, {driver.CurrentTyre})");
-                // }
             }
 
             return new RaceSimulationResult
@@ -419,24 +424,23 @@ namespace F1_simulation.Core.Race_simulator
             double driverLapTimeWithoutTraffic = GetLapTime(driver, tyres, driver.RacePace);
             double carAheadLapTime = GetLapTime(carAhead, tyres, carAhead.RacePace);
 
-            // Check if driver would overtake naturally (their lap time is faster)
+            // Check if driver would overtake
             if (driverLapTimeWithoutTraffic < carAheadLapTime)
             {
-                // They would overtake anyway, so no traffic penalty
                 return 0.0;
             }
 
-            // Check if within 1 second gap (close racing)
+            // Check if within 1 second gap - close racing
             double timeGap = driver.TotalTime - carAhead.TotalTime;
             if (timeGap <= 1.0)
             {
-                return trafficPenalty; // Full traffic penalty
+                return trafficPenalty;
             }
 
             // Reduce penalty for larger gaps but still close racing
             if (timeGap <= 3.0)
             {
-                return trafficPenalty * 0.5; // Half penalty for being somewhat stuck
+                return trafficPenalty * 0.5;
             }
 
             return 0.0;
@@ -475,45 +479,5 @@ namespace F1_simulation.Core.Race_simulator
             TyreType.Hard => TyreUsage.Hard,
             _ => throw new ArgumentOutOfRangeException()
         };
-    }
-
-    public class StartingTyreOptimizer
-    {
-        private readonly OptimalStrategy _strategySolver;
-
-        public StartingTyreOptimizer(IEnumerable<Tyre> tyres, int raceLength, double pitLoss = 25.0)
-        {
-            _strategySolver = new OptimalStrategy(tyres, raceLength, pitLoss);
-        }
-
-        // Find optimal starting tyre based on race length and strategy
-        public TyreType FindOptimalStartingTyre(int qualifyingPosition)
-        {
-            // Try each starting tyre and see which gives the best race strategy
-            var strategies = new List<(TyreType tyre, double raceTime)>();
-
-            foreach (var startingTyre in new[] { TyreType.Soft, TyreType.Medium, TyreType.Hard })
-            {
-                // Create initial race state with this starting tyre
-                var initialState = new RaceState(
-                    Tyre: startingTyre,
-                    TyreAge: 0,
-                    LapsRemaining: 70, // Assume standard race length for strategy calculation
-                    Usage: startingTyre switch
-                    {
-                        TyreType.Soft => TyreUsage.Soft,
-                        TyreType.Medium => TyreUsage.Medium,
-                        TyreType.Hard => TyreUsage.Hard,
-                        _ => TyreUsage.Soft
-                    }
-                );
-
-                var strategy = _strategySolver.Solve(initialState);
-                strategies.Add((startingTyre, strategy.TotalTime));
-            }
-
-            // Return the tyre with the best (lowest) race time
-            return strategies.OrderBy(s => s.raceTime).First().tyre;
-        }
     }
 }

@@ -3,7 +3,6 @@ namespace F1_simulation.Core.Strategy_solver;
 using F1_simulation.Core.Tyres;
 
 // Must be immutable so required the creation of TyreType
-// Choice of record struct important
 public readonly record struct RaceState(
     TyreType Tyre,
     int TyreAge,

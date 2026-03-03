@@ -222,7 +222,7 @@ namespace F1_simulation.Controllers
         }
 
         [HttpGet("montecarlo")]
-        public async Task<IActionResult> GetMonteCarlo([FromQuery] string circuit = "Catalunya", [FromQuery] int year = 2024, [FromQuery] int numSimulations = 1000)
+        public async Task<IActionResult> GetMonteCarlo([FromQuery] string circuit = "Catalunya", [FromQuery] int year = 2024, [FromQuery] int numSimulations = 500)
         {
             try
             {

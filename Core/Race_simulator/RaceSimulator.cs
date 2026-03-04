@@ -186,15 +186,15 @@ namespace F1_simulation.Core.Race_simulator
             public int DriverNumber { get; init; }
             public int Position { get; init; }
             public TyreType CurrentTyre { get; init; }
-            public TyreType StartingTyre { get; init; } // Track the starting tyre
+            public TyreType StartingTyre { get; init; }
             public int TyreAge { get; init; }
-            public double RacePace { get; init; } // Race pace gap to fastest driver (seconds)
-            public double TotalTime { get; init; } // Cumulative race time
+            public double RacePace { get; init; }
+            public double TotalTime { get; init; }
             public bool HasDRS { get; init; }
             public int Lap { get; init; }
-            public LinkedListNode<DriverState>? Node { get; init; } // Reference to linked list node
-            public TyreUsage UsedTyres { get; init; } // Track which tyres have been used
-            public double FuelRemaining { get; init; } // Fuel in terms of laps worth of fuel
+            public LinkedListNode<DriverState>? Node { get; init; }
+            public TyreUsage UsedTyres { get; init; } 
+            public double FuelRemaining { get; init; } // laps of fuel remaining
         }
 
         public record RaceSimulationResult
@@ -211,7 +211,7 @@ namespace F1_simulation.Core.Race_simulator
             IEnumerable<Tyre> tyres,
             int raceLength = 66,
             double pitLoss = 25.0,
-            double trafficPenalty = 0.5, // seconds lost when stuck behind another car
+            double trafficPenalty = 0.1, 
             F1_cache? cache = null) 
         {
             // Get qualifying and race pace data
@@ -355,30 +355,35 @@ namespace F1_simulation.Core.Race_simulator
                     var gapToCarBehind = node?.Next != null ?
                         node.Next.Value.TotalTime - driverCopy.TotalTime : double.MaxValue;
 
-                    var pitDecision = raceSolver.Decide(
+                    // Get driver ahead's starting tyre for strategy simulation
+                    var driverAheadStartTyre = node?.Previous != null ?
+                        node.Previous.Value.CurrentTyre : TyreType.Medium;
+
+                    var (pitAction, pitTo, _) = raceSolver.Decide(
                         absoluteLap: lap,
                         raceLength: raceLength,
                         tyre: driverCopy.CurrentTyre,
                         tyreAge: driverCopy.TyreAge,
                         usedTyres: driverCopy.UsedTyres,
-                        trafficPenaltyThisLap: trafficLoss,
-                        fuelRemaining: driverCopy.FuelRemaining
+                        initialGapToAhead: Math.Max(0, gapToCarAhead),
+                        fuelRemaining: driverCopy.FuelRemaining,
+                        driverAheadStartTyre: driverAheadStartTyre
                     );
 
-                    if (pitDecision.action == StrategyAction.Pit && pitDecision.pitTo.HasValue)
+                    if (pitAction == StrategyAction.Pit && pitTo.HasValue)
                     {
                         baseLapTime += pitLoss;
 
                         if (!pitStops.ContainsKey(driverCopy.DriverNumber))
                             pitStops[driverCopy.DriverNumber] = new();
 
-                        pitStops[driverCopy.DriverNumber].Add((lap, pitDecision.pitTo.Value));
+                        pitStops[driverCopy.DriverNumber].Add((lap, pitTo.Value));
 
                         driverCopy = driverCopy with
                         {
-                            CurrentTyre = pitDecision.pitTo.Value,
+                            CurrentTyre = pitTo.Value,
                             TyreAge = 0,
-                            UsedTyres = driverCopy.UsedTyres | ToUsageFlag(pitDecision.pitTo.Value)
+                            UsedTyres = driverCopy.UsedTyres | ToUsageFlag(pitTo.Value)
                         };
                     }
                     else

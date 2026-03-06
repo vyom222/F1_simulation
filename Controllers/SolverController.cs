@@ -557,7 +557,6 @@ namespace F1_simulation.Controllers
                         pit_laps = pitLaps,
                         windows = windows,
                         best_time = s.BestTime,
-                        time_spread = s.TimeSpread
                     });
                     
                     // Prepare data for caching

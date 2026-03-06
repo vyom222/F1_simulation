@@ -4,8 +4,6 @@ using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Microsoft.Extensions.Primitives;
-
 public static class TyreModelClient
 {
     public class ErrorResponse

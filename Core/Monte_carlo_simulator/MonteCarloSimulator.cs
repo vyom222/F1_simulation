@@ -45,8 +45,8 @@ namespace F1_simulation.Core.Monte_carlo_simulator
             IEnumerable<Tyre> tyres,
             int raceLength = 66,
             double pitLoss = 25.0,
-            double trafficPenalty = 0.5,
-            int numSimulations = 1000,
+            double trafficPenalty = 0.1,
+            int numSimulations = 500,
             F1_cache? cache = null)
         {
             var positionCounts = new Dictionary<int, Dictionary<int, int>>(); // driver -> position -> count
@@ -319,42 +319,53 @@ namespace F1_simulation.Core.Monte_carlo_simulator
                     bool shouldPit = false;
                     TyreType? pitTo = null;
 
-                    var pitDecision = raceSolver.Decide(
+                    // Calculate gap to car ahead
+                    var gapToCarAhead = node?.Previous != null ?
+                        driverCopy.TotalTime - node.Previous.Value.TotalTime : 0.0;
+                    var driverAheadStartTyre = node?.Previous != null ?
+                        node.Previous.Value.CurrentTyre : TyreType.Medium;
+
+                    var (pitAction, pitToTyre, _) = raceSolver.Decide(
                         absoluteLap: lap,
                         raceLength: raceLength,
                         tyre: driverCopy.CurrentTyre,
                         tyreAge: driverCopy.TyreAge,
                         usedTyres: driverCopy.UsedTyres,
-                        trafficPenaltyThisLap: trafficLoss,
-                        fuelRemaining: driverCopy.FuelRemaining
+                        initialGapToAhead: Math.Max(0, gapToCarAhead),
+                        fuelRemaining: driverCopy.FuelRemaining,
+                        driverAheadStartTyre: driverAheadStartTyre
                     );
 
                     // Add stochastic element: drivers sometimes pit earlier/later than optimal
                     // This creates strategy variance across simulations
-                    if (pitDecision.action == StrategyAction.Pit && pitDecision.pitTo.HasValue)
+                    if (pitAction == StrategyAction.Pit && pitToTyre.HasValue)
                     {
                         // 70% chance to follow optimal strategy exactly
                         // 30% chance to deviate by waiting 1-2 more laps
                         double randomChoice = _random.NextDouble();
                         
-                        if (randomChoice > 0.7 && driverCopy.TyreAge < 25) // Don't delay if tyres are very old
+                        if (randomChoice > 0.4 && driverCopy.TyreAge < 25) // Don't delay if tyres are very old
                         {
-                            // Delay pit stop by 1-2 laps
+                            // Delay pit stop by 1
                             int delay = _random.Next(1, 3);
 
                             // Use driver number as a hash to create consistency within a driver's race
+                            // If delay = 1 then continues, otherwise then check parity. 
+                            // At most one lap delay because parity changes every lap
+                            // So 3/4 times it goes straight through 
+                            // (3/4) * (2/5) = 3/10 so the 30% is correct
                             int pitThreshold = (driver.DriverNumber + lap) % delay;
                             if (pitThreshold == 0)
                             {
                                 shouldPit = true;
-                                pitTo = pitDecision.pitTo.Value;
+                                pitTo = pitToTyre.Value;
                             }
                         }
                         else
                         {
                             // Follow optimal strategy
                             shouldPit = true;
-                            pitTo = pitDecision.pitTo.Value;
+                            pitTo = pitToTyre.Value;
                         }
                     }
 

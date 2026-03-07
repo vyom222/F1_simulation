@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>F1 Simulation - Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -14,7 +15,7 @@
         }
         body {
             background: linear-gradient(135deg, #b1d9e8 0%, #719cf9 100%);
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Inter', Tahoma, Geneva, Verdana, sans-serif;
             padding: 20px;
             min-height: 100vh;
         }
@@ -95,7 +96,7 @@
             color: #00ff00;
             padding: 15px;
             border-radius: 5px;
-            font-family: 'Courier New', monospace;
+            font-family: 'Inter', monospace; /* CHANGE FONT */
             font-size: 13px;
             line-height: 1.5;
             max-height: 600px;
@@ -290,20 +291,6 @@
                 <div class="status-message" id="curveStatus" style="display: none;"></div>
                 <div class="chart-container">
                     <canvas id="tyreCurvesChart"></canvas>
-                </div>
-                <div class="legend">
-                    <div class="legend-item">
-                        <div class="legend-color" style="background-color: #FF0000;"></div>
-                        <span>Soft</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color" style="background-color: #FFFF00;"></div>
-                        <span>Medium</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color" style="background-color: #50444457; border: 1px solid #242126;"></div>
-                        <span>Hard</span>
-                    </div>
                 </div>
             </div>
             <div class="card" style="grid-column: 1 / -1;">

@@ -20,7 +20,7 @@ namespace F1_simulation.Core.Strategy_solver
             int raceLength,
             double pitLossSeconds = 20,
             double fuelPenaltyPerLap = 0.05,
-            double windowSizeSeconds = 2.5,  // 2.5 second window for grouping strategies
+            double windowSizeSeconds = 1.5,  // 2 second window for grouping strategies
             int numStrategies = 3  // Find top 3 different compound sequences
         )
         {
@@ -251,74 +251,36 @@ namespace F1_simulation.Core.Strategy_solver
             return new BasicStrategy(compoundSequence, adjustedPits, totalTime);
         }
 
-        // Group similar strategies into windows (both by compound sequence and time proximity)
+        // Group similar strategies into windows by compound sequence
         public List<StrategyWithWindows> CreatePitWindowsFromStrategies(List<BasicStrategy> strategies)
         {
             var groupedStrategies = new List<StrategyWithWindows>();
 
-            // Group by compound sequence
+            // Group by compound sequence - ONE entry per compound sequence
             var bySequence = strategies.GroupBy(s => s.CompoundSequence);
 
             foreach (var sequenceGroup in bySequence)
             {
                 var sequenceStrategies = sequenceGroup.OrderBy(s => s.TotalTime).ToList();
                 var compoundSequence = sequenceGroup.Key;
+                var bestTime = sequenceStrategies.First().TotalTime;
 
-                // Sub-group by time proximity (within 2.5 seconds)
-                var timeGroups = GroupByTimeProximity(sequenceStrategies, 2.5);
+                // Only include strategies within _windowSizeSeconds of the best time
+                var filteredStrategies = sequenceStrategies
+                    .Where(s => s.TotalTime <= bestTime + _windowSizeSeconds)
+                    .ToList();
 
-                foreach (var timeGroup in timeGroups)
-                {
-                    if (groupedStrategies.Count >= _numStrategies) break;
+                // Create windows from filtered strategies
+                var windows = CreateWindowsForTimeGroup(filteredStrategies);
 
-                    var timeGroupStrategies = timeGroup.OrderBy(s => s.TotalTime).ToList();
-                    var bestTime = timeGroupStrategies.First().TotalTime;
-                    var timeSpread = timeGroupStrategies.Last().TotalTime - bestTime;
-
-                    // Create windows from all strategies in this time group
-                    var windows = CreateWindowsForTimeGroup(timeGroupStrategies);
-
-                    groupedStrategies.Add(new StrategyWithWindows(
-                        CompoundSequence: compoundSequence,
-                        PitWindowRanges: windows,
-                        BestTime: bestTime,
-                        TimeSpread: timeSpread
-                    ));
-                }
+                groupedStrategies.Add(new StrategyWithWindows(
+                    CompoundSequence: compoundSequence,
+                    PitWindowRanges: windows,
+                    BestTime: bestTime
+                ));
             }
 
             return groupedStrategies.OrderBy(s => s.BestTime).Take(_numStrategies).ToList();
-        }
-
-        // Group strategies by time proximity (within 2.5 seconds)
-        private List<List<BasicStrategy>> GroupByTimeProximity(List<BasicStrategy> strategies, double maxTimeDiff)
-        {
-            var groups = new List<List<BasicStrategy>>();
-            var remaining = new List<BasicStrategy>(strategies);
-
-            while (remaining.Any())
-            {
-                var group = new List<BasicStrategy> { remaining[0] };
-                remaining.RemoveAt(0);
-
-                // Find all strategies within time range of this group
-                var groupMinTime = group.Min(s => s.TotalTime);
-                var groupMaxTime = group.Max(s => s.TotalTime);
-
-                var toAdd = remaining.Where(s =>
-                    s.TotalTime >= groupMinTime - maxTimeDiff &&
-                    s.TotalTime <= groupMaxTime + maxTimeDiff).ToList();
-
-                group.AddRange(toAdd);
-                foreach (var strategy in toAdd)
-                {
-                    remaining.Remove(strategy);
-                }
-
-                groups.Add(group.OrderBy(s => s.TotalTime).ToList());
-            }
-
-            return groups;
         }
 
         // Create windows by grouping similar pit timings from strategies in the same time group
@@ -365,10 +327,7 @@ namespace F1_simulation.Core.Strategy_solver
                         maxLap = Math.Min(_raceLength - 1, medianLap + MAX_WINDOW_SIZE / 2);
                     }
 
-                    // Calculate time spread based on lap range (rough estimate)
-                    double timeSpread = (maxLap - minLap) * 0.15; // 0.15 seconds per lap difference
-
-                    windows.Add(new PitWindowRange(minLap, maxLap, pitTo.Value, timeSpread));
+                    windows.Add(new PitWindowRange(minLap, maxLap, pitTo.Value));
                 }
             }
 
@@ -433,16 +392,14 @@ namespace F1_simulation.Core.Strategy_solver
         public readonly record struct PitWindowRange(
             int MinLap,
             int MaxLap,
-            TyreType PitTo,
-            double TimeSpread  // Time difference between best and worst in this range
+            TyreType PitTo
         );
 
         // Complete strategy with pit window ranges
         public readonly record struct StrategyWithWindows(
             string CompoundSequence,  // e.g., "Soft->Hard->Hard"
             List<PitWindowRange> PitWindowRanges,
-            double BestTime,         // Best time in the strategy
-            double TimeSpread        // Time difference across all windows
+            double BestTime         // Best time in the strategy
         );
 
         private static TyreUsage ToUsageFlag(TyreType tyre) => tyre switch

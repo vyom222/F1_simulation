@@ -43,7 +43,7 @@
             background: white;
             border-radius: 10px;
             padding: 30px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
             transition: transform 0.3s ease;
         }
         .card:hover {
@@ -223,7 +223,6 @@
     <div class="container">
         <div class="header">
             <h1>F1 Simulation Dashboard</h1>
-            <p>Powered by C# Backend with Python Integration</p>
         </div>
 
         <div class="cards">
@@ -237,11 +236,11 @@
 
             <!-- Year and circuit select card -->
             <div class="card">
-                <h2>Circuit and Year Select</h2>
+                <h2>Select Circuit and Year</h2>
                 <div style="margin-bottom: 15px; display: flex; justify-content: left; align-items: left; gap: 20px; flex-wrap: wrap;">
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <label for="circuitSelect" style="margin-right: 5px;">Circuit:</label>
-                        <select id="circuitSelect" style="padding: 8px; border-radius: 5px; border: 1px solid #ccc;">
+                        <select id="circuitSelect" style="padding: 8px; border-radius: 5px; border: 1px solid #ccc; font-size: 14px;">
                             <option value="Sakhir">Bahrain - Sakhir</option>
                             <option value="Jeddah">Saudi Arabia - Jeddah</option>
                             <option value="Melbourne">Australia - Melbourne</option>
@@ -265,12 +264,12 @@
                             <option value="Austin">United States - Austin</option>
                             <option value="Las Vegas">United States - Las Vegas</option>
                             <option value="Lusail">Qatar - Lusail</option>
-                            <option value="Yas Marina Circuit">United Arab Emirates - Yas Marina Circuit</option>
+                            <option value="Yas Marina Circuit">UAE - Yas Marina Circuit</option>
                         </select>
                     </div>
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <label for="yearSelect" style="margin-right: 5px;">Year:</label>
-                        <select id="yearSelect" style="padding: 8px; border-radius: 5px; border: 1px solid #ccc;">
+                        <select id="yearSelect" style="padding: 8px; border-radius: 5px; border: 1px solid #ccc; font-size: 14px;">
                             <option value="2023">2023</option>
                             <option value="2024">2024</option>
                             <option value="2025">2025</option>
@@ -326,7 +325,7 @@
                     <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 10px;">
                         <div>
                             <label style="display: block; margin-bottom: 5px; font-weight: bold;">Number of Stops:</label>
-                            <select id="customStopsSelect" onchange="updateCustomStrategyInputs()" style="padding: 8px; border-radius: 5px; border: 1px solid #ccc; width: 100px;">
+                            <select id="customStopsSelect" onchange="updateCustomStrategyInputs()" style="padding: 8px; border-radius: 5px; border: 1px solid #ccc; width: 100px; font-size: 14px;">
                                 <option value="1">1 Stop</option>
                                 <option value="2">2 Stops</option>
                                 <option value="3">3 Stops</option>
@@ -337,7 +336,7 @@
                         </div>
                         <div>
                             <label style="display: block; margin-bottom: 5px; font-weight: bold;">Starting Tyre:</label>
-                            <select id="startingTyreSelect" style="padding: 8px; border-radius: 5px; border: 1px solid #ccc; width: 120px;">
+                            <select id="startingTyreSelect" style="padding: 8px; border-radius: 5px; border: 1px solid #ccc; width: 120px; font-size: 14px;">
                                 <option value="SOFT">Soft</option>
                                 <option value="MEDIUM">Medium</option>
                                 <option value="HARD">Hard</option>
@@ -378,7 +377,7 @@
                 <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
                     <div>
                         <label for="mcDriverSelect" style="margin-right: 5px;">Driver:</label>
-                        <select id="mcDriverSelect" style="padding: 8px; border-radius: 5px; border: 1px solid #ccc;"></select>
+                        <select id="mcDriverSelect" style="padding: 8px; border-radius: 5px; border: 1px solid #ccc; font-size: 14px;"></select>
                     </div>
                     <div>
                         <label for="mcSims" style="margin-right: 5px;">Simulations:</label>

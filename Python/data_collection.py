@@ -15,6 +15,10 @@ import random
 # In-memory cache to avoid repeated API calls during the same session
 _session_cache = {}
 
+'''
+Before this function would store files but now it just stores the collected
+data in session cache so that multiple API calls are not made
+ '''
 def fetch_and_cache(url):
     # Check if already in memory cache
     if url in _session_cache:
@@ -29,7 +33,10 @@ def fetch_and_cache(url):
     _session_cache[url] = data
     return data
 
-# Check that data is not missing entries
+
+'''
+Check that data is not missing entries by checking values in the json
+'''
 def is_valid_stint(stint):
     return (
         stint.get("lap_start") is not None
@@ -45,13 +52,17 @@ COMPOUNDS = ["SOFT", "MEDIUM", "HARD"]
 SECONDS_SAVED_PER_LAP_FUEL = 0.045
 
 # Tyre degradation parameters 
-DEGRADATION_FACTOR = 0.5  # Not used anymore, but can be added for a more professional use of this software (considering one race at a time)
-TARGET_SOFT_SLOPE = 0.15      # Target degradation rate for soft tyres (seconds per lap) - realistic: 0.1-0.225
-TARGET_MEDIUM_SLOPE = 0.13    # Target for medium tyres - realistic: 0.1-0.17
-TARGET_HARD_SLOPE = 0.08      # Target for hard tyres - realistic: 0.05-0.12
+DEGRADATION_FACTOR = 0.5  # Not used anymore, but can be added for a more professional use of this software (where you consider one race at a time)
+TARGET_SOFT_SLOPE = 0.15      # Target degradation rate for soft tyres (seconds per lap) - 0.1-0.225
+TARGET_MEDIUM_SLOPE = 0.13    # Target for medium tyres - 0.1-0.17
+TARGET_HARD_SLOPE = 0.08      # Target for hard tyres - 0.05-0.12
 INTERCEPT_DIFF = 0.45          # Minimum difference in first lap pace between tyre compounds
 
-
+'''
+If there is insufficient data for one of the tyres then 
+estimate the curves using the constraints and the curves
+for the other tyres 
+'''
 def infer_missing_tyre(available_tyres):
 
     compounds = ["SOFT", "MEDIUM", "HARD"]
@@ -113,6 +124,10 @@ def infer_missing_tyre(available_tyres):
     return result
 
 
+'''
+If there is enough data then the curves are found using a joint optimisation
+method. This involves setting some constraints and then solving for them.
+'''
 def fit_tyres_jointly(data_dict):
     compounds = ["SOFT", "MEDIUM", "HARD"]
     
@@ -157,6 +172,7 @@ def fit_tyres_jointly(data_dict):
     
     # Objective function: minimize sum of squared residuals for all compounds
     # Plus penalty for deviating from target slopes
+    # This is called by the minimise function to see whether the data fits well
     def objective(x):
         total_error = 0.0
         
@@ -175,7 +191,9 @@ def fit_tyres_jointly(data_dict):
         target_slopes = [TARGET_SOFT_SLOPE, TARGET_MEDIUM_SLOPE, TARGET_HARD_SLOPE]
         slope_penalty_weight = 1000.0  # Increased weight to keep slopes closer to targets
         for i, target in enumerate(target_slopes):
+            
             slope_diff = (x[i] - target) ** 2
+
             # Weight by inverse of data size (more data = less penalty for deviation)
             # For inferred tyres (no data), use higher penalty to stick close to target
             data_size = len(data_dict[compounds[i]]["X"])
@@ -189,14 +207,17 @@ def fit_tyres_jointly(data_dict):
     
     # Constraints
     margin = 0.001
-    max_intercept_diff = 2.0  # Maximum 1 second difference between compounds
+    max_intercept_diff = 2.0  # Maximum 2 second difference between compounds
     constraints = [
         # Slope constraints: SOFT > MEDIUM > HARD
+        # ineq means that it must be ≥0
         {'type': 'ineq', 'fun': lambda x: x[0] - x[1] - margin},  # SOFT slope > MEDIUM slope
         {'type': 'ineq', 'fun': lambda x: x[1] - x[2] - margin},  # MEDIUM slope > HARD slope
+
         # Intercept constraints: HARD > MEDIUM > SOFT (with minimum difference)
         {'type': 'ineq', 'fun': lambda x: x[5] - x[4] - INTERCEPT_DIFF},  # HARD intercept >= MEDIUM intercept + INTERCEPT_DIFF
         {'type': 'ineq', 'fun': lambda x: x[4] - x[3] - INTERCEPT_DIFF},  # MEDIUM intercept >= SOFT intercept + INTERCEPT_DIFF
+
         # Maximum difference constraint: total spread <= 1 second
         {'type': 'ineq', 'fun': lambda x: max_intercept_diff - (x[5] - x[3])},  # HARD - SOFT <= 1.0 second
     ]
@@ -300,7 +321,9 @@ def fit_tyres_jointly(data_dict):
             "HARD": {"Slope": TARGET_HARD_SLOPE, "Intercept": avg_intercept + INTERCEPT_DIFF}
         }
 
-
+'''
+Call the OpenF1 API
+'''
 def get_sessions(circuit, year):
     sessions_url = (
     f"https://api.openf1.org/v1/sessions?"
@@ -308,7 +331,7 @@ def get_sessions(circuit, year):
     )
     sessions = fetch_and_cache(sessions_url)
     
-    # Filter out testing sessions (Day 1, Day 2, Day 3, etc.)
+    # Filter out testing sessions (Day 1, Day 2, etc.)
     # Only include actual race weekend practice sessions
     race_weekend_sessions = [
         s for s in sessions 
@@ -323,7 +346,9 @@ def get_sessions(circuit, year):
     
     return session_keys
 
-
+'''
+Clean the data from the API and then call the joint optimisation
+'''
 def get_curves(session_keys):
     # Check if it's a sprint race (only 1 session)
     if len(session_keys) == 1:
@@ -336,7 +361,7 @@ def get_curves(session_keys):
     for compound in COMPOUNDS:
         all_X = []
         all_y = []
-
+        # Get sessions, laps and stints
         for session in session_keys:
             stints = fetch_and_cache(
                 f"https://api.openf1.org/v1/stints?session_key={session}"
@@ -382,7 +407,7 @@ def get_curves(session_keys):
 
                     tyre_age = tyre_age_start + (lap_num - start)
 
-                    # Fuel correction
+                    # Fuel correction assuming fuel load is stint length + 2 laps of fuel
                     laps_of_fuel = stint_length + 2
                     laps_completed = lap_num - start
                     remaining_fuel_laps = max(0, laps_of_fuel - laps_completed)
@@ -393,14 +418,11 @@ def get_curves(session_keys):
                     all_X.append(tyre_age)
                     all_y.append(corrected_time)
 
-        # if len(all_X) < 10:
-        #     print(f"Not enough data for {compound}")
-        #     continue
 
         X = np.array(all_X).reshape(-1, 1)
         y = np.array(all_y)
 
-        # ===== BALANCED ITERATIVE OUTLIER REMOVAL =====
+        # Outlier removal. Uses a majority voting method from 4 methods
         max_iterations = 5  # Fewer iterations
         min_samples = max(20, int(len(X) * 0.3))  # Keep at least 30% of data
         prev_size = len(X)
@@ -413,13 +435,13 @@ def get_curves(session_keys):
             initial_model = HuberRegressor(epsilon=1.35, max_iter=200).fit(X, y)
             residuals = y - initial_model.predict(X)
             
-            # Method 1: Modified Z-score with MAD (balanced threshold)
+            # Method 1: Modified Z-score with MAD 
             median_residual = np.median(residuals)
             mad = np.median(np.abs(residuals - median_residual))
             z_score_votes = np.zeros(len(X), dtype=int)
-            if mad > 0:
-                modified_z_scores = 0.6745 * (residuals - median_residual) / mad
-                z_score_votes = (np.abs(modified_z_scores) < 3.0).astype(int)  # Balanced: 3.0
+            if mad > 0: # Ensure no divide by 0 error
+                modified_z_scores = 0.6745 * (residuals - median_residual) / mad # So comparable to N(0,1)
+                z_score_votes = (np.abs(modified_z_scores) < 3.0).astype(int)  # 3 deviations of median
             
             # Method 2: IQR method (balanced)
             q1 = np.percentile(residuals, 25)
@@ -427,7 +449,7 @@ def get_curves(session_keys):
             iqr = q3 - q1
             iqr_votes = np.zeros(len(X), dtype=int)
             if iqr > 0:
-                iqr_lower = q1 - 2.0 * iqr  # Balanced: 2.0
+                iqr_lower = q1 - 2.0 * iqr  # 2 IQRs
                 iqr_upper = q3 + 2.0 * iqr
                 iqr_votes = ((residuals >= iqr_lower) & (residuals <= iqr_upper)).astype(int)
             else:
@@ -441,7 +463,7 @@ def get_curves(session_keys):
                 if std_residual > 0:
                     extreme_votes = (np.abs(residuals - mean_residual) < 3.5 * std_residual).astype(int)
             
-            # Method 4: RANSAC inlier detection (as additional vote)
+            # Method 4: RANSAC inlier detection
             ransac_votes = np.ones(len(X), dtype=int)
             try:
                 if len(X) > 10:  # Only use RANSAC if we have enough points
@@ -461,13 +483,13 @@ def get_curves(session_keys):
             total_votes = z_score_votes + iqr_votes + extreme_votes + ransac_votes
             keep = total_votes >= 3
             
-            # Additional check: ensure we don't remove too much
+            # Ensure we don't remove too much
             current_size = np.sum(keep)
             removal_ratio = 1.0 - (current_size / len(X))
             
             # If removing more than 40% in one iteration, be more lenient
             if removal_ratio > 0.4:
-                keep = total_votes >= 2  # Lower threshold: at least 2 out of 4 methods
+                keep = total_votes >= 2  # Lower threshold to at least 2 out of 4 methods
                 current_size = np.sum(keep)
             
             # Check if we made progress
@@ -490,7 +512,7 @@ def get_curves(session_keys):
                 slope = model.coef_[0]
                 
                 # If slope is negative or very small, we may have removed too many points
-                # Try a more lenient pass if slope is problematic
+                # Try a more lenient pass if slope is problematic just using MAD and Z-scores
                 if slope < 0.001 and len(X) < len(all_X) * 0.5:
                     # Re-run with more lenient outlier removal
                     X = np.array(all_X).reshape(-1, 1)
@@ -503,7 +525,7 @@ def get_curves(session_keys):
                     mad = np.median(np.abs(residuals - median_residual))
                     if mad > 0:
                         modified_z_scores = 0.6745 * (residuals - median_residual) / mad
-                        keep = np.abs(modified_z_scores) < 3.5  # More lenient
+                        keep = np.abs(modified_z_scores) < 3.5  # 3.5 instead of 3
                     else:
                         keep = np.ones(len(X), dtype=bool)
                     
@@ -541,9 +563,8 @@ def get_curves(session_keys):
                 "Intercept": 0.0 
             }
 
-    # Joint optimisation with physical constraints
-    # Works with 2 or 3 compounds (will infer missing one if only 2 available)
-    if len(results_dict) >= 2:  # Need at least 2 compounds to do joint optimisation
+    # Joint optimisation with physical constraints works with 2 or 3 compounds
+    if len(results_dict) >= 2: 
         # Prepare data dict for joint fitting
         data_dict = {compound: {"X": results_dict[compound]["X"], "y": results_dict[compound]["y"]} 
                      for compound in COMPOUNDS}
@@ -556,8 +577,7 @@ def get_curves(session_keys):
             for compound in COMPOUNDS:
                 results_dict[compound]["Slope"] = joint_results[compound]["Slope"]
                 results_dict[compound]["Intercept"] = joint_results[compound]["Intercept"]
-        # else:
-        #     print("Warning: Joint optimisation failed, using individual fits")
+
     
     # Generate results for all compounds
     for compound in COMPOUNDS:
@@ -583,15 +603,16 @@ def get_curves(session_keys):
 
     return results
 
-
+'''
+Find the driver race pace and qualifying pace from OpenF1 API data
+'''
 def get_driver_data(sessions_key):
     # Check if it's a sprint race (only 1 session)
     if len(sessions_key) == 1:
         raise ValueError("Insufficient data: Sprint Race")
 
-    # QUALIFYING: Use fastest lap from FP2 and FP3 only
+    # Use fastest lap from FP2 and FP3 only
     quali_laps = []
-    # Use sessions at index 1 and 2 (FP2 and FP3)
     quali_sessions = sessions_key[1:] if len(sessions_key) >= 3 else sessions_key
     for session_key in quali_sessions:
         quali_laps_url = f"https://api.openf1.org/v1/laps?session_key={session_key}"
@@ -611,7 +632,7 @@ def get_driver_data(sessions_key):
                     "driver_number": driver_num
                 }
 
-    # Sort by fastest practice lap time (simulates qualifying order)
+    # Sort by fastest practice lap time to get quali order
     sorted_drivers = sorted(driver_times.values(), key=lambda x: x["time"])
 
     # Calculate gaps for qualifying simulation
@@ -627,10 +648,9 @@ def get_driver_data(sessions_key):
                 "gap": f"+{gap:.3f}" if gap > 0 else "0.000"
             })
 
-    # RACE PACE: Use ALL practice sessions for comprehensive race pace analysis
+    # For race pace use all practice sessions
     all_practice_laps = []
 
-    # Collect data from all practice sessions
     for session_key in sessions_key:
         laps_url = f"https://api.openf1.org/v1/laps?session_key={session_key}"
         laps = fetch_and_cache(
@@ -639,7 +659,9 @@ def get_driver_data(sessions_key):
         all_practice_laps.extend(laps)
 
     # Filter usable laps for race pace analysis
-    # Use more inclusive criteria to get enough data for regression
+    # Uses a very simple anomaly detector because I want variations. If there
+    # is too few data then the driver race pace won't be very accurate the median
+    # is taken so the anomalies aren't a big issue either
     usable_laps = []
     for lap in all_practice_laps:
         if (lap.get("lap_duration") and
@@ -675,7 +697,7 @@ def get_driver_data(sessions_key):
     usable_laps = [lap for lap in usable_laps if lap["driver_number"] in valid_drivers]
 
     if len(usable_laps) < 50 or len(valid_drivers) < 5:
-        # Not enough data for regression - create mock data based on all qualifying drivers
+        # Not enough data for regression
         race_results = []
         random.seed(42)  # Reproducible results
 
@@ -683,7 +705,7 @@ def get_driver_data(sessions_key):
             # Create synthetic race pace with some correlation to qualifying
             base_gap = float(driver["gap"].replace("+", ""))
             # Race pace has some correlation with quali but also independent factors
-            quali_correlation = 0.6  # Qualifying skill correlates with race
+            quali_correlation = 0.6
             race_specific = (random.random() - 0.5) * 0.15  # Race-specific variation ±0.075
 
             race_gap = base_gap * quali_correlation + race_specific
@@ -694,7 +716,7 @@ def get_driver_data(sessions_key):
                 "gap_to_fastest": f"+{race_gap:.3f}" if race_gap > 0 else f"{race_gap:.3f}"
             })
 
-        # Sort race results by gap to fastest (ascending order)
+        # Sort race results by gap to fastest
         race_results.sort(key=lambda x: float(x["gap_to_fastest"].replace("+", "")))
 
         # Find the minimum gap (fastest driver) and adjust all gaps relative to it
@@ -711,15 +733,13 @@ def get_driver_data(sessions_key):
                     # Fastest driver always shows (0.000)
                     result["gap_to_fastest"] = "0.000"
                 else:
-                    # Others show adjusted positive gaps with + prefix
                     result["gap_to_fastest"] = f"+{adjusted_gap:.3f}"
     else:
         # Build baseline model T_i = mu + b_fuel * f_i + b_deg * a_i + b_compound * c_i + e_i
-        race_length = 66  # Assume known race length acts more as a random coefficient
+        race_length = 66  # Acts more as a random coefficient
         X = []
         y = []
 
-        # Tyre compound encoding (SOFT=0, MEDIUM=1, HARD=2)
         compound_map = {"SOFT": 0, "MEDIUM": 1, "HARD": 2}
 
         for lap in usable_laps:
@@ -727,15 +747,14 @@ def get_driver_data(sessions_key):
             lap_number = lap["lap_number"]
             compound = lap["tyre_compound"]
 
-            # Fuel load: laps remaining / total laps (assuming race distance)
             fuel_load = (race_length - lap_number) / race_length
-            tyre_age = lap_number  # Lap number = approximate tyre age
+            tyre_age = lap_number  # Lap number = approximate tyre age (could've reused a tyre)
             compound_factor = compound_map.get(compound, 1)  # Default to medium
 
             X.append([1, fuel_load, tyre_age, compound_factor])  # [intercept, fuel, age, compound]
             y.append(lap_duration)
 
-        # Fit baseline model using robust regression
+        # Fit baseline model
         try:
             X_array = np.array(X)
             y_array = np.array(y)
@@ -779,7 +798,7 @@ def get_driver_data(sessions_key):
                     median_residual = np.median(residuals)
                     driver_race_pace[driver_num] = median_residual
 
-            # Sort by race pace (lower residual = faster than baseline)
+            # Sort by race pace
             pace_sorted = sorted(driver_race_pace.items(), key=lambda x: x[1])
 
             # Calculate gaps for race pace
@@ -795,24 +814,20 @@ def get_driver_data(sessions_key):
                         "gap_to_fastest": f"+{gap:.3f}" if gap > 0 else "0.000"
                     })
 
-                # Sort race results by gap to fastest (ascending order)
                 race_results.sort(key=lambda x: float(x["gap_to_fastest"].replace("+", "")))
 
-                # Find the minimum gap (fastest driver) and adjust all gaps relative to it
+                # Find the minimum gap and adjust all gaps
                 if race_results:
                     min_gap = min(float(result["gap_to_fastest"].replace("+", "")) for result in race_results)
 
-                    # Update positions after sorting and adjust gaps relative to fastest
                     for i, result in enumerate(race_results, 1):
                         result["position"] = i
                         original_gap = float(result["gap_to_fastest"].replace("+", ""))
                         adjusted_gap = original_gap - min_gap
 
                         if i == 1:
-                            # Fastest driver always shows (0.000)
                             result["gap_to_fastest"] = "0.000"
                         else:
-                            # Others show adjusted positive gaps with + prefix
                             result["gap_to_fastest"] = f"+{adjusted_gap:.3f}"
             else:
                 race_results = []
@@ -821,28 +836,27 @@ def get_driver_data(sessions_key):
             print(f"Race pace regression failed: {e}", file=sys.stderr)
             # Fallback: create synthetic race pace data for all qualifying drivers
             race_results = []
-            random.seed(67)  # For reproducible results
+            random.seed(67)
 
             for driver in quali_results:
                 # Add random variation to simulate different race performance
                 base_gap = float(driver["gap"].replace("+", ""))
-                # Add some correlation but also independent variation
+                # Add some correlation but also independent variation done in a similar way to quali pace
                 correlation_factor = 0.7  # 70% correlation with quali performance
                 random_factor = 0.3
                 race_variation = (random.random() - 0.5) * 0.2  # ±0.1 variation
 
                 race_gap = base_gap * correlation_factor + race_variation * random_factor
                 race_results.append({
-                    "position": driver["position"],  # Will be updated after sorting
+                    "position": driver["position"],
                     "driver_number": driver["driver_number"],
                     "avg_lap_time": f"{race_gap:.3f}",
                     "gap_to_fastest": f"+{race_gap:.3f}" if race_gap > 0 else f"{race_gap:.3f}"
                 })
 
-            # Sort race results by gap to fastest (ascending order)
             race_results.sort(key=lambda x: float(x["gap_to_fastest"].replace("+", "")))
 
-            # Find the minimum gap (fastest driver) and adjust all gaps relative to it
+            # Find the minimum gap
             if race_results:
                 min_gap = min(float(result["gap_to_fastest"].replace("+", "")) for result in race_results)
 
@@ -853,10 +867,8 @@ def get_driver_data(sessions_key):
                     adjusted_gap = original_gap - min_gap
 
                     if i == 1:
-                        # Fastest driver always shows (0.000)
                         result["gap_to_fastest"] = "0.000"
                     else:
-                        # Others show adjusted positive gaps with + prefix
                         result["gap_to_fastest"] = f"+{adjusted_gap:.3f}"
 
     return {

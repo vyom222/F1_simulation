@@ -5,7 +5,7 @@ namespace F1_simulation.Core.Strategy_solver
 {
     public class OptimalStrategy
     {
-        // Memo table: state -> best result from this state
+        // Memo table: state: best result from this state
         private readonly Dictionary<RaceState, StrategyResult> _memo = new();
 
         private readonly Dictionary<TyreType, Tyre> _tyres;
@@ -20,8 +20,8 @@ namespace F1_simulation.Core.Strategy_solver
             int raceLength,
             double pitLossSeconds = 20,
             double fuelPenaltyPerLap = 0.05,
-            double windowSizeSeconds = 1.5,  // 2 second window for grouping strategies
-            int numStrategies = 3  // Find top 3 different compound sequences
+            double windowSizeSeconds = 1.5,  // 1.5 second window for grouping strategies
+            int numStrategies = 3  // Find top 3 strats
         )
         {
             _tyres = tyres.ToDictionary(t => t.Name switch
@@ -39,10 +39,10 @@ namespace F1_simulation.Core.Strategy_solver
             _numStrategies = numStrategies;
         }
 
-        // Dynamic Programming Solver
+        // DP Solver
         public StrategyResult Solve(RaceState state)
         {
-            // ----- Base case -----
+            // Base case
             if (state.LapsRemaining <= 0)
             {
                 // Must use at least 2 different compounds
@@ -58,7 +58,7 @@ namespace F1_simulation.Core.Strategy_solver
                 return new StrategyResult(0.0, StrategyAction.StayOut, null);
             }
 
-            // ----- Memo lookup -----
+            // Memo lookup
             if (_memo.TryGetValue(state, out var cached))
                 return cached;
 
@@ -68,6 +68,8 @@ namespace F1_simulation.Core.Strategy_solver
                 null
             );
 
+            // Evaluate each of the different actions
+
             // Stay out
             {
                 var tyre = _tyres[state.Tyre];
@@ -76,15 +78,18 @@ namespace F1_simulation.Core.Strategy_solver
                 {
                     double lapTime = GetFuelAdjustedLapTime(tyre, state.TyreAge, state);
 
+                    // Update the state
                     var nextState = state with
                     {
                         TyreAge = state.TyreAge + 1,
                         LapsRemaining = state.LapsRemaining - 1
                     };
 
+                    // Call solver recursively
                     var next = Solve(nextState);
                     double cost = lapTime + next.TotalTime;
 
+                    // Check if it is the best state
                     if (cost < best.TotalTime && !double.IsInfinity(cost))
                     {
                         best = new StrategyResult(
@@ -104,6 +109,7 @@ namespace F1_simulation.Core.Strategy_solver
                 double lapTime = GetFuelAdjustedLapTime(tyre, 0, state);
                 var flag = ToUsageFlag(tyreType);
 
+                // Use OR with the tyre usage to maintain usage uptil that point
                 var nextState = state with
                 {
                     Tyre = tyreType,
@@ -112,6 +118,7 @@ namespace F1_simulation.Core.Strategy_solver
                     Usage = state.Usage | flag
                 };
 
+                // Recursive calling
                 var next = Solve(nextState);
                 double cost = _pitLoss + lapTime + next.TotalTime;
 
@@ -170,7 +177,7 @@ namespace F1_simulation.Core.Strategy_solver
                 }
                 var compoundSequence = string.Join("->", compoundList);
 
-                // Add the optimal strategy
+                // Add the optimal strategy, generate tuples of (lap no, tyre) when pitting
                 var pitStops = optimalStrategy
                     .Where(step => step.Action == StrategyAction.Pit)
                     .Select(step => (optimalStrategy.IndexOf(step) + 1, step.PitTo!.Value))
@@ -256,7 +263,7 @@ namespace F1_simulation.Core.Strategy_solver
         {
             var groupedStrategies = new List<StrategyWithWindows>();
 
-            // Group by compound sequence - ONE entry per compound sequence
+            // Group by compound sequence
             var bySequence = strategies.GroupBy(s => s.CompoundSequence);
 
             foreach (var sequenceGroup in bySequence)
@@ -315,7 +322,8 @@ namespace F1_simulation.Core.Strategy_solver
                     int minLap = pitLaps.Min();
                     int maxLap = pitLaps.Max();
                     
-                    // Limit window size to maximum 15 laps
+                    // Limit window size to maximum 15 laps even though i don't think this is ever reached because i only check
+                    // 5 laps either side
                     const int MAX_WINDOW_SIZE = 15;
                     int windowSize = maxLap - minLap;
                     
@@ -341,7 +349,7 @@ namespace F1_simulation.Core.Strategy_solver
             return CreatePitWindowsFromStrategies(basicStrategies);
         }
 
-        // Strategy reconstruction
+        // Strategy reconstruction, solver doesn't give an actual strategy just the best move at that point
         public List<StrategyResult> GetFullStrategy(RaceState start)
         {
             var strategy = new List<StrategyResult>();
@@ -397,9 +405,9 @@ namespace F1_simulation.Core.Strategy_solver
 
         // Complete strategy with pit window ranges
         public readonly record struct StrategyWithWindows(
-            string CompoundSequence,  // e.g., "Soft->Hard->Hard"
+            string CompoundSequence,  // e.g. Soft->Hard->Hard
             List<PitWindowRange> PitWindowRanges,
-            double BestTime         // Best time in the strategy
+            double BestTime         // Best time for that sequence
         );
 
         private static TyreUsage ToUsageFlag(TyreType tyre) => tyre switch
@@ -414,18 +422,16 @@ namespace F1_simulation.Core.Strategy_solver
             BitOperations.PopCount((uint)usage);
 
 
-
-
         // Add fuel penalty based on laps remaining
         private double GetFuelAdjustedLapTime(Tyre tyre, int tyreAge, RaceState state)
         {
-            // Ensure tyre age is valid (minimum 0) and doesn't exceed available degradation data
+            // Ensure tyre age is valid and doesn't exceed available degradation data
             int safeTyreAge = Math.Max(0, Math.Min(tyreAge, tyre.LapTimes.Length - 1));
 
             // Additional safety check
             if (safeTyreAge >= tyre.LapTimes.Length || safeTyreAge < 0)
             {
-                // Fallback to first available lap time if something goes wrong
+                // Fallback if something goes wrong
                 safeTyreAge = 0;
             }
 

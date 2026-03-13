@@ -6,9 +6,6 @@ namespace F1_simulation.Core.Tyres
         protected double Slope { get; }
         protected double Intercept { get; }
         public string Name { get; }
-        // Public properties for debugging
-        public double GetSlope() => Slope;
-        public double GetIntercept() => Intercept;
         private readonly double[] _lapTimes;
 
 
@@ -22,26 +19,18 @@ namespace F1_simulation.Core.Tyres
             GenerateLapTimes();
         }
 
-        // Most laps at Monaco - 72
         private void GenerateLapTimes()
         {
 
             for (int lap = 0; lap < _lapTimes.Length; lap++)
             {
+                // using y = mx+c
                 _lapTimes[lap] = lap * Slope + Intercept;
             }
         }
 
         // More efficient for slicing
         public ReadOnlySpan<double> LapTimes => _lapTimes;
-
-        // Convenience helper
-        public ReadOnlySpan<double> GetStint(int startLap, int length)
-        {
-            return _lapTimes.AsSpan(startLap, length);
-        }
-
-
 
     }
     public enum TyreType

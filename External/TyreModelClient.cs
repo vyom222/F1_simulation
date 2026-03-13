@@ -55,13 +55,15 @@ public static class TyreModelClient
         public List<DriverQualifyingData>? qualifying { get; set; }
         public List<DriverRaceData>? race_pace { get; set; }
     }
-
+    // Use of async. Task is used to signify that this isn't an instant program 
+    // and other programs can be run in the mean time
     public static async Task<bool> IsApiHealthy()
     {
         var client = new HttpClient();
 
         try
         {
+            // call the Python API which will be hosted on port 8000
             var response = await client.GetAsync("http://127.0.0.1:8000/health");
             if (!response.IsSuccessStatusCode)
                 return false;
@@ -75,7 +77,7 @@ public static class TyreModelClient
         }
     }
 
-
+    // Get tyre curves
     public static async Task<List<TyreResult>?> CallTyreModelAsync(List<int> session_keys)
     {
         var client = new HttpClient();
@@ -88,12 +90,13 @@ public static class TyreModelClient
 
         string json = JsonSerializer.Serialize(request);
         var content = new StringContent(json, Encoding.UTF8, "application/json");
-
+        // Parameterised API calls
         var response = await client.PostAsync(
             "http://127.0.0.1:8000/tyre_model",
             content
         );
 
+        // Good exception handling
         if (!response.IsSuccessStatusCode)
         {
             string errorJson = await response.Content.ReadAsStringAsync();
@@ -110,8 +113,7 @@ public static class TyreModelClient
     {
         var client = new HttpClient();
 
-        // Get driver qualifying pace and race pace from practice data
-        // Qualifying: fastest lap, Race pace: residuals vs baseline model
+        // Get driver qualifying pace and race pace
         var request = new TyreRequest
         {
             Session_keys = session_keys
@@ -136,6 +138,9 @@ public static class TyreModelClient
 
         return JsonSerializer.Deserialize<DriverDataResult>(responseJson);
     }
+    // get session keys
+    // all of these methods are in a similar format and so all have the same parameterised
+    // API calls and good exception handling
     public static async Task<List<int>?> CallSessionsDataAsync(string circuit, int year)
     {
         var client = new HttpClient();

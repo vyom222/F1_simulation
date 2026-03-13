@@ -2,7 +2,7 @@ namespace F1_simulation.Core.Strategy_solver;
 
 using F1_simulation.Core.Tyres;
 
-// Must be immutable so required the creation of TyreType
+// Must be immutable, don't want memoed state to change accidentally
 public readonly record struct RaceState(
     TyreType Tyre,
     int TyreAge,

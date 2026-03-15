@@ -1,8 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Threading.Tasks;
 using F1_simulation.Core.Race_simulator;
 using F1_simulation.Core.Strategy_solver;
 using F1_simulation.Core.Tyres;
@@ -13,7 +8,7 @@ namespace F1_simulation.Core.Monte_carlo_simulator
     public class MonteCarloSimulator
     {
         private readonly Random _random;
-        private readonly double _gaussianNoiseStdDev;
+        private readonly double _gaussianNoiseStdDev; // need random noise
         private readonly double _safetyCarProbability;
         private readonly int _minSafetyCarLap;
         private readonly int _maxSafetyCarLap;
@@ -22,8 +17,8 @@ namespace F1_simulation.Core.Monte_carlo_simulator
 
         public MonteCarloSimulator(
             double gaussianNoiseStdDev = 0.3,
-            double safetyCarProbability = 0.3,
-            int minSafetyCarLap = 5,
+            double safetyCarProbability = 0.3, // approximate average across all races
+            int minSafetyCarLap = 2,
             int maxSafetyCarLap = 60,
             double firstLapChaosStdDev = 2.0,
             double overtakeProbabilityBase = 0.3,
@@ -49,6 +44,7 @@ namespace F1_simulation.Core.Monte_carlo_simulator
             int numSimulations = 500,
             F1_cache? cache = null)
         {
+            // Complex data structure - nested dictionary and a nested list
             var positionCounts = new Dictionary<int, Dictionary<int, int>>(); // driver -> position -> count
             var allFinalPositions = new List<List<RaceSimulator.DriverState>>();
             var allRaceInfos = new List<RaceInfo>();
@@ -105,6 +101,7 @@ namespace F1_simulation.Core.Monte_carlo_simulator
             {
                 if (sim % 100 == 0)
                 {
+                    // To keep track of how many have run because if choosing a large number then can take a very long time
                     Console.WriteLine($"Running simulation {sim + 1}/{numSimulations}...");
                 }
 
@@ -152,6 +149,7 @@ namespace F1_simulation.Core.Monte_carlo_simulator
                 averagePositions[driverNum] = count > 0 ? totalPosition / count : 0.0;
             }
 
+            // get median
             var medianPosition = averagePositions.Values
                 .OrderBy(x => x)
                 .Skip(averagePositions.Count / 2)
@@ -249,7 +247,7 @@ namespace F1_simulation.Core.Monte_carlo_simulator
 
             return (raceResult, raceInfo);
         }
-
+        // Similar structure to the race simulator and uses the same solver from the race simulator
         private async Task<RaceSimulator.RaceSimulationResult> SimulateRaceLapByLap(
             List<RaceSimulator.DriverState> drivers,
             Dictionary<int, OptimalStrategy.StrategyWithWindows> driverStrategies,
@@ -269,6 +267,7 @@ namespace F1_simulation.Core.Monte_carlo_simulator
 
             for (int lap = 1; lap <= raceLength; lap++)
             {
+                // check if there is a safety car this lap
                 safetyCarActive = safetyCarLaps.Contains(lap);
                 double currentPitLoss = safetyCarActive ? pitLoss / 2.0 : pitLoss;
 
@@ -276,6 +275,7 @@ namespace F1_simulation.Core.Monte_carlo_simulator
                 bool drsEnabled = lap >= 2 && !safetyCarActive;
                 currentDrivers = currentDrivers.Select(d => d with { HasDRS = drsEnabled }).ToList();
 
+                // Use of linked list
                 var driverLinkedList = new LinkedList<RaceSimulator.DriverState>(currentDrivers);
 
                 // Each driver makes pitting decision and calculates lap time
@@ -325,6 +325,7 @@ namespace F1_simulation.Core.Monte_carlo_simulator
                     var driverAheadStartTyre = node?.Previous != null ?
                         node.Previous.Value.CurrentTyre : TyreType.Medium;
 
+                    // uses the horizon based method to find the best strat
                     var (pitAction, pitToTyre, _) = raceSolver.Decide(
                         absoluteLap: lap,
                         raceLength: raceLength,
@@ -353,7 +354,7 @@ namespace F1_simulation.Core.Monte_carlo_simulator
                             // If delay = 1 then continues, otherwise then check parity. 
                             // At most one lap delay because parity changes every lap
                             // So 3/4 times it goes straight through 
-                            // (3/4) * (2/5) = 3/10 so the 30% is correct
+                            // (3/4) * (2/5) = 3/10
                             int pitThreshold = (driver.DriverNumber + lap) % delay;
                             if (pitThreshold == 0)
                             {
@@ -368,7 +369,7 @@ namespace F1_simulation.Core.Monte_carlo_simulator
                             pitTo = pitToTyre.Value;
                         }
                     }
-
+                    // Update states
                     if (shouldPit && pitTo.HasValue)
                     {
                         baseLapTime += currentPitLoss;
@@ -427,7 +428,7 @@ namespace F1_simulation.Core.Monte_carlo_simulator
                 PitStops = pitStops
             };
         }
-
+        // Same logic as the race simuulator
         private double CalculateTrafficPenalty(RaceSimulator.DriverState driver, LinkedListNode<RaceSimulator.DriverState> driverNode, Dictionary<TyreType, Tyre> tyres, double trafficPenalty)
         {
             if (driverNode.Previous == null) return 0.0;
@@ -455,7 +456,7 @@ namespace F1_simulation.Core.Monte_carlo_simulator
 
             return 0.0;
         }
-
+        // Model of tyre deg
         private double GetLapTime(RaceSimulator.DriverState driver, Dictionary<TyreType, Tyre> tyres, double racePace)
         {
             if (!tyres.TryGetValue(driver.CurrentTyre, out var tyre))
@@ -562,12 +563,13 @@ namespace F1_simulation.Core.Monte_carlo_simulator
                 var driver = positions[i];
                 int currentPos = i + 1;
                 int delta = positionDeltas[driver.DriverNumber];
-                int targetPos = Math.Clamp(currentPos + delta, 1, positions.Count);
+                int targetPos = Math.Clamp(currentPos + delta, 1, positions.Count); // don't excced limits of positions
                 
                 newPositions.Add((driver, targetPos));
             }
             
             // Sort by target position and resolve conflicts
+            // Laptime has already been added so if ties can prioritise faster drivers
             var sortedByTarget = newPositions.OrderBy(x => x.targetPosition).ThenBy(x => x.driver.TotalTime).ToList();
             
             var result = new List<RaceSimulator.DriverState>();
@@ -598,6 +600,7 @@ namespace F1_simulation.Core.Monte_carlo_simulator
             var result = new List<RaceSimulator.DriverState>();
             
             // Convert to linked list for easy position swapping
+            // Linked list maintainance
             var positions = new LinkedList<RaceSimulator.DriverState>();
             foreach (var (driver, _) in driversByTime)
             {
@@ -635,7 +638,7 @@ namespace F1_simulation.Core.Monte_carlo_simulator
                     current.Value = current.Next.Value;
                     current.Next.Value = temp;
                     
-                    // Add small time penalty to the overtaken car (defending)
+                    // Add small time penalty to the overtaken car for defending
                     current.Next.Value = current.Next.Value with 
                     { 
                         TotalTime = current.Next.Value.TotalTime + 0.2 
@@ -674,48 +677,5 @@ namespace F1_simulation.Core.Monte_carlo_simulator
         public List<RaceInfo> AllRaceInfos { get; set; } = new();
 
         public double MedianPosition {get; set;} = new();
-
-        // Prints the average positions in a formatted table
-        public void PrintAveragePositions()
-        {
-            Console.WriteLine("\n=== MONTE CARLO SIMULATION RESULTS ===");
-            Console.WriteLine("Average Final Positions:");
-            Console.WriteLine("Driver\tAvg Position");
-            Console.WriteLine("------\t------------");
-
-            var sortedByPosition = AveragePositions
-                .OrderBy(kvp => kvp.Value)
-                .ToList();
-
-            foreach (var (driverNum, avgPos) in sortedByPosition)
-            {
-                Console.WriteLine($"{driverNum}\t{avgPos:F2}");
-            }
-        }
-
-        // Prints position distribution for a specific driver
-        public void PrintPositionDistribution(int driverNumber)
-        {
-            if (!PositionCounts.ContainsKey(driverNumber))
-            {
-                Console.WriteLine($"No data for driver {driverNumber}");
-                return;
-            }
-
-            Console.WriteLine($"\n=== Position Distribution for Driver {driverNumber} ===");
-            var distribution = PositionCounts[driverNumber]
-                .OrderBy(kvp => kvp.Key)
-                .ToList();
-
-            int totalSimulations = distribution.Sum(kvp => kvp.Value);
-
-            Console.WriteLine("Position\tCount\tPercentage");
-            Console.WriteLine("--------\t-----\t----------");
-            foreach (var (position, count) in distribution)
-            {
-                double percentage = (count / (double)totalSimulations) * 100.0;
-                Console.WriteLine($"{position}\t\t{count}\t{percentage:F1}%");
-            }
-        }
     }
 }

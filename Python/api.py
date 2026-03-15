@@ -5,6 +5,9 @@ from fastapi.responses import JSONResponse
 
 app = FastAPI()
 
+# two different types of requests. One in which the session keys are given
+# another in which the circuit and year are given, used as parameters to call the 
+# functions
 class TyreRequest(BaseModel):
     session_keys: list[int]
 
@@ -12,7 +15,10 @@ class SessionRequest(BaseModel):
     circuit: str
     year: int
 
-# GET SESSIONS AND MAKE A FUCNTION FOR SESSIONS
+'''
+Using HTTP GET and POST methods to return data. Acts as a client-server model where 
+requests can be made to it and it will return data (acting like a server) returns some JSON text
+'''
 @app.post("/tyre_model")
 def tyre_model(req: TyreRequest):
     try:

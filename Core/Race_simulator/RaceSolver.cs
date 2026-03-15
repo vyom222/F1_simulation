@@ -1,8 +1,5 @@
 using F1_simulation.Core.Tyres;
 using F1_simulation.Core.Strategy_solver;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace F1_simulation.Core.Race_simulator
 {
@@ -22,6 +19,7 @@ namespace F1_simulation.Core.Race_simulator
         List<(int Lap, TyreType PitTo)> Strategy
     );
 
+    // Sealed to ensure that it can't be inherited from and the algorithm stays consistent. Range of OOP skills
     public sealed class RaceSolver
     {
         private readonly Dictionary<TyreType, Tyre> _tyres;
@@ -29,7 +27,7 @@ namespace F1_simulation.Core.Race_simulator
         private readonly double _pitLoss;
         private readonly int _horizon;
 
-        private const double DirtyAirPenalty = -0.3;     
+        private const double DirtyAirPenalty = -0.3;    // To include DRS boost because before it was worse than without DRS 
         private const double ClosePenalty = 0.2;  
 
         // Gap thresholds for traffic levels
@@ -39,6 +37,9 @@ namespace F1_simulation.Core.Race_simulator
         // Only TacticalState is compared for memoisation, DriverAheadInfo is carried along
         private readonly Dictionary<TacticalState, (double Time, DriverAheadInfo AheadInfo)> _memo = new();
 
+        // Record means that two states wiil be deemed equal even if different objects
+        // struct means it stores the value type so it is not stored on the heap so less need
+        // for garbage collector. Better performance
         private readonly record struct TacticalState(
             int LapOffset,
             TyreType Tyre,
@@ -82,6 +83,7 @@ namespace F1_simulation.Core.Race_simulator
             int tyreAge = 0;
             var usedTyres = ToUsageFlag(startTyre);
 
+            // Solve() is recursive so there is no need to make this recursive as well
             for (int lap = 1; lap <= raceLength; lap++)
             {
                 int lapsRemaining = raceLength - lap + 1;
@@ -125,6 +127,7 @@ namespace F1_simulation.Core.Race_simulator
             _ => 0
         };
 
+        // Driver's decision making program
         public (StrategyAction action, TyreType? pitTo, DriverAheadInfo? aheadInfo) Decide(
             int absoluteLap,
             int raceLength,
@@ -156,8 +159,9 @@ namespace F1_simulation.Core.Race_simulator
             TyreType? bestTyre = null;
             DriverAheadInfo? bestPitAheadInfo = null;
 
-            if (tyreAge > 0) // Prevent pitting every lap
+            if (tyreAge > 0) // Prevent pitting every lap since this is never optimal
             {
+                // Check the best time using horizon based search for each tyre
                 foreach (var t in _tyres.Keys)
                 {
                     // After pitting, we rejoin with a larger gap (pit loss added)
@@ -165,6 +169,7 @@ namespace F1_simulation.Core.Race_simulator
                     double gapAfterPit = initialGapToAhead + _pitLoss;
                     var trafficAfterPit = DetermineTrafficLevel(gapAfterPit);
 
+                    // Update the state
                     var pitState = new TacticalState(1, t, 1, fuelRemaining - 1, trafficAfterPit);
 
                     var tyre_obj = _tyres[t];
@@ -181,7 +186,7 @@ namespace F1_simulation.Core.Race_simulator
                     }
                 }
             }
-
+            // Compare the different options
             if (bestPit < stay)
             {
                 return (StrategyAction.Pit, bestTyre, bestPitAheadInfo);
@@ -198,10 +203,14 @@ namespace F1_simulation.Core.Race_simulator
             TyreUsage usedTyres,
             double currentGap)
         {
+            // Recursive programming
             // Base case: reached horizon or end of race
             if (state.LapOffset >= _horizon || absoluteLap + state.LapOffset >= raceLength)
             {
                 int lapsRemaining = raceLength - (absoluteLap + state.LapOffset);
+
+                // Just solve assuming no traffic since the horizon has passed and it is too time complex 
+                // to do the horizon for more than a few laps
                 double strategicTime = _strategicSolver.Solve(new RaceState(
                     state.Tyre,
                     state.TyreAge,
@@ -221,13 +230,14 @@ namespace F1_simulation.Core.Race_simulator
                 return (strategicTime, new DriverAheadInfo(currentGap, remainingAheadLaps, remainingAheadPits));
             }
 
+            // Check cache
             if (_memo.TryGetValue(state, out var cached))
                 return cached;
 
             double best = double.PositiveInfinity;
             DriverAheadInfo bestAheadInfo = new(currentGap, new List<double>(), new List<(int, TyreType)>());
 
-            // ---- Stay out ----
+            // Stay out 
             var tyre = _tyres[state.Tyre];
             if (state.TyreAge < tyre.LapTimes.Length)
             {
@@ -239,20 +249,21 @@ namespace F1_simulation.Core.Race_simulator
                 int aheadLapIndex = absoluteLap + state.LapOffset - 1;
                 double aheadLapTime = (aheadLapIndex >= 0 && aheadLapIndex < _driverAheadLapTimes!.Count)
                     ? _driverAheadLapTimes[aheadLapIndex]
-                    : ourLapTime; // Fallback if out of bounds
+                    : ourLapTime; // Fallback if out of bounds - defensive programming
 
-                // Update gap: positive gap means we're behind
+                // Update gap, positive gap means we're behind
                 double newGap = currentGap + ourLapTime - aheadLapTime;
                 
                 // Gap can't go negative (would mean we overtake - assume we do and are then in free air)
                 if (newGap <= 0)
                 {
-                    newGap = FreeAirGap + 67; // Reset to free air and make sure we don't end up back in traffic
+                    newGap = FreeAirGap + 67; // Reset to free air and make sure we don't end up back in traffic by adding a large enough gap
                 }
 
                 // Determine new traffic level based on new gap
                 TrafficLevel newTraffic = DetermineTrafficLevel(newGap);
 
+                // Easy creation of new next state
                 var nextState = state with
                 {
                     LapOffset = state.LapOffset + 1,
@@ -261,6 +272,7 @@ namespace F1_simulation.Core.Race_simulator
                     Traffic = newTraffic
                 };
 
+                // Solve the next state
                 var result = Evaluate(nextState, absoluteLap, raceLength, usedTyres, newGap);
 
                 best = ourLapTime + result.Time;
@@ -270,7 +282,7 @@ namespace F1_simulation.Core.Race_simulator
                     result.AheadInfo.Strategy
                 );
             }
-
+            // Add to cache
             _memo[state] = (best, bestAheadInfo);
             return (best, bestAheadInfo);
         }

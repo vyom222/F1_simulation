@@ -1,38 +1,18 @@
-using System;
-using System.Diagnostics;
-using System.IO;
 using System.Text.Json;
-using System.Net.Http;
 using System.Text;
-using System.Threading.Tasks;
 using F1_simulation.Core.Strategy_solver;
 using F1_simulation.Core.Tyres;
-using System.Numerics;
 using F1_simulation.Database;
 
 namespace F1_simulation.Core.Race_simulator
 {
     public class RaceSimulator
     {
-        public static async Task RunQualifyingSimulation(string circuit, int year)
-        {
-            // Get qualifying data from the API
-            var qualiData = await GetQualifyingData(circuit, year, null);
-            if (qualiData.HasValue)
-            {
-                PrintQualifyingResults(qualiData.Value);
-            }
-            else
-            {
-                Console.WriteLine("No qualifying data available");
-            }
-        }
-
         public static async Task<JsonElement?> GetQualifyingData(string circuit, int year, F1_cache? cache = null)
         {
             try
             {
-                // Check cache first if available
+                // Check database first if available
                 if (cache != null)
                 {
                     var cachedQualifying = cache.GetQualifying(circuit, year);
@@ -52,6 +32,7 @@ namespace F1_simulation.Core.Race_simulator
                     }
                 }
 
+                // If not in database:
                 using var client = new HttpClient();
                 client.BaseAddress = new Uri("http://127.0.0.1:8000");
 
@@ -65,6 +46,7 @@ namespace F1_simulation.Core.Race_simulator
                 var sessionJson = JsonSerializer.Serialize(sessionRequest);
                 var sessionContent = new StringContent(sessionJson, Encoding.UTF8, "application/json");
 
+                // parammeterised API calls
                 var sessionResponse = await client.PostAsync("/session_keys", sessionContent);
 
                 if (!sessionResponse.IsSuccessStatusCode)
@@ -82,7 +64,7 @@ namespace F1_simulation.Core.Race_simulator
                     return null;
                 }
 
-                // Now get driver data using session keys
+                // Then get driver data using session keys
                 var driverDataRequest = new
                 {
                     session_keys = sessionKeys
@@ -121,6 +103,7 @@ namespace F1_simulation.Core.Race_simulator
                                 ["gap"] = q.GetProperty("gap").GetString() ?? "0.000"
                             });
                         }
+                        // caching process isolated from the actual solver
                         cache.AddQualifying(circuit, year, qualifyingList);
                     }
                     
@@ -143,43 +126,13 @@ namespace F1_simulation.Core.Race_simulator
                 
                 return jsonElement;
             }
+            // error handling
             catch (Exception ex)
             {
                 Console.WriteLine($"Error getting qualifying data: {ex.Message}");
                 return null;
             }
         }
-
-        public static void PrintQualifyingResults(JsonElement data)
-        {
-            try
-            {
-                if (!data.TryGetProperty("qualifying", out JsonElement qualifying) || qualifying.ValueKind != JsonValueKind.Array)
-                {
-                    Console.WriteLine("No qualifying results found");
-                    return;
-                }
-
-                Console.WriteLine("=== QUALIFYING RESULTS ===");
-                Console.WriteLine("Pos\tDriver\tTime\t\tGap");
-                Console.WriteLine("---\t------\t----\t\t---");
-
-                foreach (var result in qualifying.EnumerateArray())
-                {
-                    var position = result.GetProperty("position").GetInt32();
-                    var driverNumber = result.GetProperty("driver_number").GetInt32();
-                    var time = result.GetProperty("time").GetString();
-                    var gap = result.GetProperty("gap").GetString();
-
-                    Console.WriteLine($"{position}\t{driverNumber}\t{time}\t{gap}");
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error printing qualifying results: {ex.Message}");
-            }
-        }
-
 
         public record DriverState
         {
@@ -192,7 +145,6 @@ namespace F1_simulation.Core.Race_simulator
             public double TotalTime { get; init; }
             public bool HasDRS { get; init; }
             public int Lap { get; init; }
-            public LinkedListNode<DriverState>? Node { get; init; }
             public TyreUsage UsedTyres { get; init; } 
             public double FuelRemaining { get; init; } // laps of fuel remaining
         }
@@ -204,7 +156,8 @@ namespace F1_simulation.Core.Race_simulator
             public Dictionary<int, List<(int lap, TyreType pitTo)>>? PitStops { get; init; }
         }
 
-
+        
+        // Set up the race initial conditions and then call the lap-by-lap simulation
         public static async Task<RaceSimulationResult> SimulateRace(
             string circuit,
             int year,
@@ -337,28 +290,30 @@ namespace F1_simulation.Core.Race_simulator
                     // Find this driver in the linked list to get position context
                     var node = driverLinkedList.Find(driver);
 
-                    // Calculate traffic penalty - only if they can't overtake
+                    // Calculate traffic penalty
                     double trafficLoss = node != null ? CalculateTrafficPenalty(driverCopy, node, tyres, trafficPenalty) : 0.0;
-
-                    // Get base lap time from tyre + race pace + traffic
                     double baseLapTime = GetLapTime(driver, tyres, driver.RacePace) + trafficLoss;
 
                     // Apply DRS bonus if applicable
                     if (driverCopy.HasDRS && node != null && IsWithinDRSDistance(node))
                     {
-                        baseLapTime -= 0.4; // DRS gives 0.4 second advantage
+                        baseLapTime -= 0.4;
                     }
 
                     // Check if driver wants to pit using DP-based expected cost optimization
+                    // Defensive programming for the driver in first place
                     var gapToCarAhead = node?.Previous != null ?
                         driverCopy.TotalTime - node.Previous.Value.TotalTime : 0.0;
                     var gapToCarBehind = node?.Next != null ?
                         node.Next.Value.TotalTime - driverCopy.TotalTime : double.MaxValue;
 
                     // Get driver ahead's starting tyre for strategy simulation
+                    // Defensive programming for the driver in first place by just assigning a compound
+                    // for the driver ahead which just won't be used for later calcs.
                     var driverAheadStartTyre = node?.Previous != null ?
                         node.Previous.Value.CurrentTyre : TyreType.Medium;
 
+                    // call the solver
                     var (pitAction, pitTo, _) = raceSolver.Decide(
                         absoluteLap: lap,
                         raceLength: raceLength,
@@ -370,12 +325,13 @@ namespace F1_simulation.Core.Race_simulator
                         driverAheadStartTyre: driverAheadStartTyre
                     );
 
+                    // Use the best strategy
                     if (pitAction == StrategyAction.Pit && pitTo.HasValue)
                     {
                         baseLapTime += pitLoss;
 
                         if (!pitStops.ContainsKey(driverCopy.DriverNumber))
-                            pitStops[driverCopy.DriverNumber] = new();
+                            pitStops[driverCopy.DriverNumber] = [];
 
                         pitStops[driverCopy.DriverNumber].Add((lap, pitTo.Value));
 
@@ -386,6 +342,7 @@ namespace F1_simulation.Core.Race_simulator
                             UsedTyres = driverCopy.UsedTyres | ToUsageFlag(pitTo.Value)
                         };
                     }
+                    // best strat says stay out
                     else
                     {
                         driverCopy = driverCopy with { TyreAge = driverCopy.TyreAge + 1 };
@@ -401,7 +358,7 @@ namespace F1_simulation.Core.Race_simulator
                     lapTimes.Add((driverCopy, baseLapTime));
                 }
 
-                // Sort by total time to determine positions and handle overtakes
+                // Sort by total time to determine positions and handle overtakes using LINQ
                 currentDrivers = lapTimes
                     .OrderBy(x => x.driver.TotalTime)
                     .Select((x, index) => x.driver with { Position = index + 1 })
@@ -429,25 +386,28 @@ namespace F1_simulation.Core.Race_simulator
             double driverLapTimeWithoutTraffic = GetLapTime(driver, tyres, driver.RacePace);
             double carAheadLapTime = GetLapTime(carAhead, tyres, carAhead.RacePace);
 
+            double timeGap = driver.TotalTime - carAhead.TotalTime;
+
             // Check if driver would overtake
-            if (driverLapTimeWithoutTraffic < carAheadLapTime)
+            if (driverLapTimeWithoutTraffic - carAheadLapTime >= timeGap)
             {
                 return 0.0;
             }
 
             // Check if within 1 second gap - close racing
-            double timeGap = driver.TotalTime - carAhead.TotalTime;
+
             if (timeGap <= 1.0)
             {
                 return trafficPenalty;
             }
 
-            // Reduce penalty for larger gaps but still close racing
+            // Reduce penalty for larger gaps since dirty air is less
             if (timeGap <= 3.0)
             {
                 return trafficPenalty * 0.5;
             }
-
+            
+            // Not in traffic
             return 0.0;
         }
 

@@ -3,10 +3,8 @@ using F1_simulation.Core.Tyres;
 using F1_simulation.Core.Strategy_solver;
 using F1_simulation.Core.Race_simulator;
 using F1_simulation.Core.Monte_carlo_simulator;
-using Microsoft.AspNetCore.Mvc;
 using MySql.Data.MySqlClient;
 
-// ADD OTHER CIRCUITS
 namespace F1_simulation.Database
 {
     public class F1_cache

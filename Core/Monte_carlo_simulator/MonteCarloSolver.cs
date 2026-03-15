@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using F1_simulation.Core.Strategy_solver;
 using F1_simulation.Core.Tyres;
 
@@ -24,6 +21,7 @@ namespace F1_simulation.Core.Monte_carlo_simulator
             // Find the top 3 optimal strategies
             _availableStrategies = _optimalStrategy.FindMultipleStrategies();
             
+            // Clear error handling
             if (_availableStrategies.Count == 0)
             {
                 throw new InvalidOperationException("No valid strategies found for Monte Carlo simulation");
@@ -43,14 +41,15 @@ namespace F1_simulation.Core.Monte_carlo_simulator
         // Gets the starting tyre for a given strategy
         public TyreType GetStartingTyre(OptimalStrategy.StrategyWithWindows strategy)
         {
-            // Extract starting tyre from compound sequence (e.g., "Soft->Hard->Hard")
+            // Extract starting tyre from compound sequence "Soft->Hard->Hard"
             var compounds = strategy.CompoundSequence.Split("->");
+            // Tryparse - defensive programming
             if (compounds.Length > 0 && Enum.TryParse<TyreType>(compounds[0], out var startingTyre))
             {
                 return startingTyre;
             }
             
-            // Fallback to first available tyre
+            // Fallback tyre - defensive programming
             return TyreType.Medium;
         }
     }

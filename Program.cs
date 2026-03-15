@@ -7,8 +7,8 @@ using Microsoft.Extensions.FileProviders;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Database connection string - update password as neededs
-var connectionString = "server=127.0.0.1;port=3306;database=F1;user=root;password=bluedog13;";
+// Database connection string - update password as needed
+var connectionString = "server=127.0.0.1;port=3306;database=F1;user=root;password=********;";
 
 // Add services
 builder.Services.AddSingleton(new F1_cache(connectionString));

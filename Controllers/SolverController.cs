@@ -6,14 +6,15 @@ using F1_simulation.Core.Monte_carlo_simulator;
 using F1_simulation.Database;
 
 using Microsoft.AspNetCore.Mvc;
-using MySql.Data.MySqlClient;
-using Microsoft.IdentityModel.Tokens;
-using System.Diagnostics.Metrics;
 
 namespace F1_simulation.Controllers
 {
+    // Set it up as a controller. Means that 400 errors are automatically added as validation checks
+    // and better error responses in the JSON
     [ApiController]
     [Route("api/[controller]")]
+
+    // Inherits from the .NET base class. Gives helper methods for APIs e.g ok()
     public class SolverController : ControllerBase
     {
         private readonly F1_cache _cache;
@@ -23,21 +24,27 @@ namespace F1_simulation.Controllers
             _cache = cache;
         }
 
+        // IActionResult - an interface which represents a HTTP response returned by an action
+        // Different HTTP statuses can be returned so this allows for all of them
         private IActionResult? CheckCancelledRace(string circuit, int year)
         {
+            // In the range 23-25 only Imola was cancelled
             if (circuit.Equals("Imola", StringComparison.OrdinalIgnoreCase) && year == 2023)
             {
+                // Returns HTTP 400
                 return BadRequest(new { error = "2023 Imola Grand Prix was cancelled" });
             }
             return null;
         }
 
+        // Set-up of client-server model
         [HttpGet("health")]
         public IActionResult Health()
         {
             return Ok(new { status = "ok", service = "C# F1 Simulation API" });
         }
 
+        // Methods for the web interface to reach the data in the database
         [HttpGet("drivers")]
         public IActionResult GetDrivers()
         {
@@ -66,6 +73,7 @@ namespace F1_simulation.Controllers
             }
         }
 
+        // Which team the driver was driving for
         [HttpGet("driver-teams")]
         public IActionResult GetDriverTeams([FromQuery] int year = 2024)
         {
@@ -80,8 +88,10 @@ namespace F1_simulation.Controllers
             }
         }
 
+        // Race length
         [HttpGet("laps")]
         [HttpPost("laps")]
+        // From query says that it should be read from the url string
         public async Task<IActionResult> GetLapsData([FromQuery] string circuit = "Catalunya")
         {
             try
@@ -97,7 +107,7 @@ namespace F1_simulation.Controllers
             }
         }
 
-
+        // Quali and race pace
         [HttpGet("driver-data")]
         [HttpPost("driver-data")]
         public async Task<IActionResult> GetDriverData([FromQuery] string circuit = "Catalunya", [FromQuery] int year = 2024)
@@ -108,6 +118,7 @@ namespace F1_simulation.Controllers
                 if (cancelled != null) return cancelled;
 
                 // Check if race exists for this circuit and year
+                // e.g China 2023
                 if (!_cache.RaceExists(circuit, year))
                 {
                     return NotFound(new { error = $"No {year} {circuit} Grand Prix" });
@@ -124,9 +135,14 @@ namespace F1_simulation.Controllers
                 else
                 {
                     // Fetch from API and cache
+                    // tyremodelclient is a static class so don't need to create an instance of it
                     var ApiKeys = await TyreModelClient.CallSessionsDataAsync(circuit, year);
+
+                    // Good clear error handling
                     if (ApiKeys == null || ApiKeys.Count == 0)
                         return NotFound(new { error = "No session keys found for the specified circuit and year" });
+                    
+                    // cache the keys
                     keys = ApiKeys;
                     _cache.AddSessions(circuit, year, keys);
                 }
@@ -296,7 +312,7 @@ namespace F1_simulation.Controllers
 
                 int laps = _cache.GetLaps(circuit);
 
-                var monteCarloSimulator = new MonteCarloSimulator();
+                var monteCarloSimulator = new MonteCarloSimulator(maxSafetyCarLap:laps); // safety cars can go till the end of the race
                 var monteCarloResult = await monteCarloSimulator.RunSimulation(
                     circuit: circuit,
                     year: year,
@@ -329,6 +345,7 @@ namespace F1_simulation.Controllers
             }
         }
 
+        // These all have a similar structure of checking the database and then if not there calling the backend
         [HttpGet("top-strategies")]
         public async Task<IActionResult> GetTopStrategies([FromQuery] string circuit = "Catalunya", [FromQuery] int year = 2024, [FromQuery] int raceLength = 66)
         {
@@ -384,7 +401,7 @@ namespace F1_simulation.Controllers
                                 windows.Add(new { 
                                     min = (int)window["min"], 
                                     max = (int)window["max"],
-                                    pitTo = "" // We don't store pitTo in cache, but it's not critical for display
+                                    pitTo = "" // We don't store pitTo in cache
                                 });
                             }
                         }
@@ -496,7 +513,7 @@ namespace F1_simulation.Controllers
 
                 foreach (var s in ordered)
                 {
-                    // Use center of pit windows for pit laps (most representative)
+                    // Use center of pit windows for pit laps - on average that is where the best lies
                     var pitLaps = s.PitWindowRanges.Select(w => (w.MinLap + w.MaxLap) / 2).ToList();
 
                     // Compute stint lengths based on pit laps
@@ -514,8 +531,7 @@ namespace F1_simulation.Controllers
                         
                         if (i < pitLaps.Count)
                         {
-                            // Pit on lap pitLaps[i]: complete lap pitLaps[i]-1 on current tyres, 
-                            // pit during lap pitLaps[i], start lap pitLaps[i] on new tyres
+                            // Pit on lap pitLaps[i]: complete lap pitLaps[i]-1 on current tyres
                             stintLength = pitLaps[i] - currentLap;
                             stintEnd = pitLaps[i] - 1;
                             currentLap = pitLaps[i];

@@ -4,10 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>F1 Simulation - Dashboard</title>
+    <!-- get the font-->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
+        /* Apply to every element on the page */
+        /* CSS for web page */
         * {
             margin: 0;
             padding: 0;
@@ -15,7 +18,8 @@
         }
         body {
             background: linear-gradient(135deg, #b1d9e8 0%, #719cf9 100%);
-            font-family: 'Inter', Tahoma, Geneva, Verdana, sans-serif;
+            /* defensive programming */
+            font-family: 'Inter', sans-serif;
             padding: 20px;
             min-height: 100vh;
         }
@@ -96,7 +100,7 @@
             color: #00ff00;
             padding: 15px;
             border-radius: 5px;
-            font-family: 'Inter', monospace; /* CHANGE FONT */
+            font-family: 'Inter', sans-serif;
             font-size: 13px;
             line-height: 1.5;
             max-height: 600px;
@@ -155,7 +159,7 @@
             text-align: left;
             padding-right: 8px;
         }
-        /* hide detailed meta text (we remove it from JS) */
+        /* hide detailed meta text */
         .strategy-meta {
             display: none;
         }
@@ -197,7 +201,7 @@
             border-left: 2px dashed rgba(0,100,0,0.3);
             border-right: 2px dashed rgba(0,100,0,0.3);
             box-shadow: 0 0 8px rgba(144,238,144,0.35);
-            z-index: 10;
+            z-index: 10; /* Make sure it goes on top */
         }
         .lap-ticks {
             position: absolute;
@@ -241,6 +245,7 @@
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <label for="circuitSelect" style="margin-right: 5px;">Circuit:</label>
                         <select id="circuitSelect" style="padding: 8px; border-radius: 5px; border: 1px solid #ccc; font-size: 14px;">
+                            <!-- Uses OpenF1's naming for the short circuit but hidden from the user -->
                             <option value="Sakhir">Bahrain - Sakhir</option>
                             <option value="Jeddah">Saudi Arabia - Jeddah</option>
                             <option value="Melbourne">Australia - Melbourne</option>
@@ -292,6 +297,7 @@
                     <canvas id="tyreCurvesChart"></canvas>
                 </div>
             </div>
+            <!-- Top strategies card -->
             <div class="card" style="grid-column: 1 / -1;">
                 <h2>Top Strategies</h2>
                 <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
@@ -318,6 +324,7 @@
                     </div>
                 </div>
             </div>
+            <!-- Strategy comparison card -->
             <div class="card" style="grid-column: 1 / -1;">
                 <h2>Compare Your Strategy</h2>
                 <p style="margin-bottom: 15px; color: #666; font-size: 14px;">Enter your custom strategy (max 6 stops) by choosing when to pit and which tyres to use</p>
@@ -352,6 +359,7 @@
                     <div id="customStrategyResult" style="display:flex; flex-direction:column; gap:15px;"></div>
                 </div>
             </div>
+            <!-- Quali card -->
             <div class="card" style="grid-column: 1 / -1;">
                 <h2>Qualifying Simulation</h2>
                 <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
@@ -362,6 +370,7 @@
                     <canvas id="qualifyingChart"></canvas>
                 </div>
             </div>
+            <!-- Race Pace card -->
             <div class="card" style="grid-column: 1 / -1;">
                 <h2>Race Pace Simulation</h2>
                 <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
@@ -372,6 +381,7 @@
                     <canvas id="racePaceChart"></canvas>
                 </div>
             </div>
+            <!-- Monte Carlo card -->
             <div class="card">
                 <h2>Monte Carlo Distribution</h2>
                 <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
@@ -387,6 +397,7 @@
                     <div class="status-message" id="monteStatus" style="display:none; margin-left:10px;"></div>
                 </div>
                 <div style="display:flex; gap:18px; align-items:center; margin-bottom:8px; flex-wrap:wrap">
+                    <!-- Create placeholders -->
                     <div><strong>Expected Position:</strong> <span id="mcExpected">-</span></div>
                     <div><strong>Median Position:</strong> <span id="mcMedian">-</span></div>
                     <div><strong>Most Likely (Mode):</strong> <span id="mcMode">-</span></div>
@@ -396,6 +407,7 @@
                     <canvas id="monteCarloChart"></canvas>
                 </div>
             </div>
+            <!-- Expected standings from Monte Carlo -->
             <div class="card">
                 <h2>Expected Standings</h2>
                 <div id="standingsContainer" style="display: none;">
@@ -418,6 +430,7 @@
                     Load Monte Carlo simulation to see expected standings
                 </div>
             </div>
+            <!-- Race sim card -->
             <div class="card" style="grid-column: 1 / -1;">
                 <h2>Race Simulation Results</h2>
                 <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">

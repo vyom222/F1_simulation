@@ -51,7 +51,7 @@ window.addEventListener('load', async function() {
             apiStatus.className = 'status-message status-error';
         });
 
-    // Load curves on page load
+    // Load curves on page load + give the page a second to render fully
     setTimeout(() => {
         loadTyreCurves();
         loadStrats();
@@ -86,12 +86,12 @@ function loadTyreCurves() {
     button.disabled = true;
     showStatus('Loading tyre curves...', 'loading');
 
-    // Clear previous chart immediately
+    // Clear previous chart
     if (window.tyreCurveChart) { window.tyreCurveChart.destroy(); window.tyreCurveChart = null; }
     globalTyreCurves = null;
 
+    // Parameterised API call
     const url = `http://localhost:5000/api/solver/tyre-curves?circuit=${circuit}&year=${year}`;
-    console.log('Fetching from:', url);
 
     fetch(url)
         .then(response => {
@@ -112,7 +112,9 @@ function loadTyreCurves() {
                 globalTyreCurves = data.curves;
                 plotTyreCurves(data.curves);
                 showStatus('Tyre curves loaded successfully', 'success');
-            } else if (data.error) {
+            } 
+            // Clear error handling 
+            else if (data.error) {
                 console.error('API error:', data.error);
                 if (window.tyreCurveChart) { window.tyreCurveChart.destroy(); window.tyreCurveChart = null; }
                 globalTyreCurves = null;
@@ -135,17 +137,16 @@ function loadTyreCurves() {
         });
 }
 
+// Display messages to the user
 function showStatus(message, type) {
     const status = document.getElementById('curveStatus');
     status.textContent = message;
     status.className = 'status-message status-' + type;
     status.style.display = 'block';
 }
-
 function plotTyreCurves(curves) {
-    console.log('plotTyreCurves called with:', curves);
-    
     const canvas = document.getElementById('tyreCurvesChart');
+    // clear error handling
     if (!canvas) {
         console.error('Canvas element not found');
         showStatus('Error: Canvas element not found', 'error');
@@ -175,12 +176,12 @@ function plotTyreCurves(curves) {
     // Prepare datasets
     const datasets = [];
     for (const curve of curves) {
-        console.log('Processing curve:', curve);
         
         const compound = curve.compound;
         const slope = curve.slope;
         const intercept = curve.intercept;
-        
+
+        // for debugging
         console.log(`Compound: ${compound}, Slope: ${slope}, Intercept: ${intercept}`);
         
         // Generate curve points using y = mx + c formula
@@ -188,8 +189,6 @@ function plotTyreCurves(curves) {
         for (let lap = 0; lap <= 31; lap++) {
             curveY.push(lap * slope + intercept);
         }
-        
-        console.log(`Generated ${curveY.length} points for ${compound}`);
 
         if (!compound || slope === undefined || intercept === undefined) {
             console.warn('Skipping invalid curve - missing required fields:', curve);
@@ -262,7 +261,6 @@ function plotTyreCurves(curves) {
                 }
             }
         });
-        console.log('Chart created successfully');
     } catch (e) {
         console.error('Error creating chart:', e);
         showStatus(`Error creating chart: ${e.message}`, 'error');
@@ -270,6 +268,7 @@ function plotTyreCurves(curves) {
 }
 
 async function loadStrats(){
+    // get parameters
     const circuit = document.getElementById('circuitSelect').value;
     const year = document.getElementById('yearSelect').value;
     const button = document.getElementById('loadStratsBtn');
@@ -292,13 +291,10 @@ async function loadStrats(){
     container.innerHTML = '';
     globalBestStrategy = null;
 
+    // parameterised API call
     const url = `http://localhost:5000/api/solver/top-strategies?circuit=${circuit}&year=${year}`
 
-
-    let lastError = null;
-
-    console.log('Attempting strategies fetch:', url);
-
+    // Defensive programming for if the user presses the button many times
     // Abort previous requests so user can always start a new calculation
     if (window.currentStratController) {
         try { window.currentStratController.abort(); } catch(e) { console.warn('Could not abort previous controller', e); }
@@ -324,7 +320,7 @@ async function loadStrats(){
         try {
             data = JSON.parse(text);
         } catch (e) {
-            throw new Error(`Invalid JSON response: ${e.message} — body truncated: ${text.substring(0,200)}`);
+            throw new Error(`Invalid JSON response: ${e.message}`);
         }
 
         // Check for error response first
@@ -339,6 +335,7 @@ async function loadStrats(){
         // Render strategies
         container.innerHTML = '';
 
+        // higher order functions
         const raceLength = data.strategies.length > 0 && data.strategies[0].stints ? data.strategies[0].stints.reduce((acc, s) => acc + s.length, 0) : 66;
 
         // Cache the best strategy globally
@@ -359,20 +356,6 @@ async function loadStrats(){
             // Bar wrapper
             const wrapper = document.createElement('div');
             wrapper.className = 'strategy-bar-wrapper';
-
-            // Add lap ticks (every 6ish ticks)
-            const ticks = document.createElement('div');
-            ticks.className = 'lap-ticks';
-            const tickInterval = Math.max(1, Math.ceil(raceLength / 6));
-            for (let lap = 1; lap <= raceLength; lap += tickInterval) {
-                const tick = document.createElement('span');
-                tick.className = 'lap-tick';
-                const leftPct = ((lap - 1) / raceLength) * 100;
-                tick.style.left = leftPct + '%';
-                tick.textContent = lap;
-                ticks.appendChild(tick);
-            }
-            wrapper.appendChild(ticks);
 
             // Add stint segments
             s.stints.forEach(st => {
@@ -397,6 +380,7 @@ async function loadStrats(){
                 const minLap = Number(w.min);
                 const maxLap = Number(w.max);
 
+                // scale stints
                 const leftPct = ((minLap - 1) / raceLength) * 100;
                 const widthPct = ((maxLap - minLap + 1) / raceLength) * 100;
 
@@ -434,7 +418,7 @@ async function loadStrats(){
         status.textContent = `Loaded top strategies (${data.strategies.length})`;
         status.className = 'status-message status-success';
         status.style.display = 'block';
-        // Re-enable the button so the user can recalculate immediately
+        // Re-enable the button so the user can recalculate immediately and clear references to aborts
         button.disabled = false;
         if (window.currentStratController) { window.currentStratController = null; }
         clearTimeout(timeoutId);
@@ -481,6 +465,7 @@ function loadQuali() {
 
     fetch(url)
         .then(response => response.json().then(data => {
+            // HTTP 200 error
             if (!response.ok) {
                 throw new Error(data.error || `HTTP error! status: ${response.status}`);
             }
@@ -513,6 +498,7 @@ function loadQuali() {
 
 function parseGapSeconds(gapStr) {
     if (gapStr == null || gapStr === '') return 0;
+    // use of regex
     const s = String(gapStr).replace(/^\+/, '').trim();
     const n = parseFloat(s);
     return isNaN(n) ? 0 : n;
@@ -590,7 +576,7 @@ function plotQualifyingBarChart(qualifying) {
 }
 
 
-
+// Siimilar structure
 function loadRacePace() {
     const circuit = document.getElementById('circuitSelect').value;
     const year = document.getElementById('yearSelect').value;
@@ -624,6 +610,7 @@ function loadRacePace() {
         .then(data => {
             const raw = data.racePace || [];
             let list = [];
+            // Ensure in correct list format - normally raw.race_pace is needed
             if (Array.isArray(raw)) list = raw;
             else if (raw) list = raw.race_pace || [];
 
@@ -648,14 +635,6 @@ function loadRacePace() {
         .finally(() => {
             button.disabled = false;
         });
-}
-
-/** Parse gap string to seconds - remove the '+' */
-function parseGapSeconds(gapStr) {
-    if (gapStr == null || gapStr === '') return 0;
-    const s = String(gapStr).replace(/^\+/, '').trim();
-    const n = parseFloat(s);
-    return isNaN(n) ? 0 : n;
 }
 
 function plotRacePaceBarChart(racePace) {
@@ -735,6 +714,7 @@ async function loadRaceSimulation() {
     const status = document.getElementById('raceSimStatus');
     const btn = document.getElementById('loadRaceSimBtn');
 
+    // When I had a null option possible but now this is not needed
     if (!circuit || !year) {
         status.textContent = 'Select circuit & year';
         status.className = 'status-message status-error';
@@ -788,7 +768,7 @@ async function loadRaceSimulation() {
 async function loadMonteCarlo() {
     const circuit = document.getElementById('circuitSelect').value;
     const year = document.getElementById('yearSelect').value;
-    const sims = Number(document.getElementById('mcSims').value) || 500;
+    let sims = Math.round(Number(document.getElementById('mcSims').value)) || 500;
     const status = document.getElementById('monteStatus');
     const btn = document.getElementById('loadMonteBtn');
 
@@ -798,9 +778,14 @@ async function loadMonteCarlo() {
         status.style.display = 'block';
         return;
     }
-
+    let warning = '';
+    // ensure that the user doesn't enter a very large number which takes up to much processing time
+    if (sims > 1500) {
+        sims = 500;
+        warning = ' (max 1500 -> reset to 500)';
+    }
     btn.disabled = true;
-    status.textContent = 'Running Monte Carlo...';
+    status.textContent = 'Running Monte Carlo...' + warning;
     status.className = 'status-message status-loading';
     status.style.display = 'block';
 
@@ -833,6 +818,7 @@ async function loadMonteCarlo() {
         // Populate driver select
         const select = document.getElementById('mcDriverSelect');
         select.innerHTML = '';
+        // sort into ascending order
         const driverNums = Object.keys(avg).map(k => Number(k)).sort((a,b)=>a-b);
         driverNums.forEach(dn => {
             const opt = document.createElement('option');
@@ -886,6 +872,7 @@ function plotMonteCarloDistribution(averagePositions, positionCounts) {
 
     // Build labels (positions) sorted
     const positions = Object.keys(dist).map(k => Number(k)).sort((a,b)=>a-b);
+    // higher order functions
     const counts = positions.map(p => dist[p] || 0);
     const total = counts.reduce((a,b)=>a+b, 0) || 1;
     const percentages = counts.map(c => (c/total*100));
@@ -905,9 +892,11 @@ function plotMonteCarloDistribution(averagePositions, positionCounts) {
         }
     }
     const medianEl = document.getElementById('mcMedian');
+    // ensure type match as well with === to be absolutely sure
+    // defensive programming
     medianEl.textContent = medianPos === '-' ? '-' : `P${medianPos}`;
 
-    // mode
+    // mode - find the largest
     let modePos = '-';
     if (positions.length > 0) {
         let maxCount = -1;
@@ -919,11 +908,12 @@ function plotMonteCarloDistribution(averagePositions, positionCounts) {
     const modeEl = document.getElementById('mcMode');
     modeEl.textContent = modePos === '-' ? '-' : `P${modePos}`;
 
-    // Compute expected points
+    // Compute expected points helper
     function pointsForPosition(pos) {
         const pts = [25,18,15,12,10,8,6,4,2,1];
         return pos >= 1 && pos <= 10 ? pts[pos-1] : 0;
     }
+    // compute expected points
     let expectedPoints = 0;
     for (let i = 0; i < positions.length; i++) {
         const p = positions[i];
@@ -1002,7 +992,7 @@ function populateRaceResultsTable(raceResults) {
     raceResults.forEach((result, index) => {
         const row = document.createElement('tr');
         
-        // Alternate row colors
+        // Alternate row colors - default is white
         if (index % 2 === 0) {
             row.style.backgroundColor = '#f9f9f9';
         }
@@ -1028,8 +1018,7 @@ function populateRaceResultsTable(raceResults) {
         stratCell.textContent = result.strategy;
         stratCell.style.padding = '10px 12px';
         stratCell.style.border = '1px solid #ddd';
-        stratCell.style.fontFamily = 'monospace';
-        stratCell.style.fontWeight = 'bold';
+        stratCell.style.fontFamily = 'Inter';
         row.appendChild(stratCell);
 
         // Total Time
@@ -1038,7 +1027,7 @@ function populateRaceResultsTable(raceResults) {
         timeCell.style.padding = '10px 12px';
         timeCell.style.border = '1px solid #ddd';
         timeCell.style.textAlign = 'right';
-        timeCell.style.fontFamily = 'monospace';
+        timeCell.style.fontFamily = 'Inter';
         row.appendChild(timeCell);
 
         // Delta to First
@@ -1051,14 +1040,14 @@ function populateRaceResultsTable(raceResults) {
         deltaCell.style.padding = '10px 12px';
         deltaCell.style.border = '1px solid #ddd';
         deltaCell.style.textAlign = 'right';
-        deltaCell.style.fontFamily = 'monospace';
+        deltaCell.style.fontFamily = 'Inter';
         row.appendChild(deltaCell);
 
         tbody.appendChild(row);
     });
 }
 
-// Helper function to format time in seconds to mm:ss.sss
+// Helper function to format time in seconds to h:mm:ss.sss
 function formatTime(seconds) {
     const hours = Math.floor(seconds/3600);
     const minutes = Math.floor((seconds-hours*3600) / 60);
@@ -1090,11 +1079,6 @@ function populateStandingsTable(averagePositions) {
         .map(([driverNum, avgPos]) => ({ driverNum: Number(driverNum), avgPos }))
         .sort((a, b) => a.avgPos - b.avgPos);
 
-    // Helper function to calculate expected points
-    function pointsForPosition(pos) {
-        const pts = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
-        return pos >= 1 && pos <= 10 ? pts[pos - 1] : 0;
-    }
 
     sortedDrivers.forEach((driver, index) => {
         const row = document.createElement('tr');
@@ -1139,7 +1123,7 @@ function populateStandingsTable(averagePositions) {
         avgCell.style.padding = '8px 10px';
         avgCell.style.border = '1px solid #ddd';
         avgCell.style.textAlign = 'center';
-        avgCell.style.fontFamily = 'monospace';
+        avgCell.style.fontFamily = 'Inter';
         row.appendChild(avgCell);
 
         tbody.appendChild(row);
@@ -1158,6 +1142,7 @@ function updateCustomStrategyInputs() {
     container.innerHTML = '';
     
     for (let i = 0; i < numStops; i++) {
+        // dynamically create input boxes
         const pitDiv = document.createElement('div');
         pitDiv.style.cssText = 'display: flex; flex-direction: column; gap: 5px;';
         
@@ -1216,6 +1201,7 @@ function calculateStrategyTime(stints, tyreCurves) {
         const compound = stint.compound;
         const laps = stint.laps;
 
+        // Sum up all of the lap times
         for (let lap = 0; lap < laps; lap++) {
             const lapTime = calculateLapTime(compound, lap, tyreCurves);
             if (lapTime === null) return null;
@@ -1228,7 +1214,6 @@ function calculateStrategyTime(stints, tyreCurves) {
             totalTime += PIT_STOP_TIME;
         }
     }
-    
     return { totalTime, lapCount };
 }
 
@@ -1266,9 +1251,11 @@ async function compareCustomStrategy() {
     const pitTyres = [];
     
     for (let i = 0; i < numStops; i++) {
-        const lap = parseInt(document.getElementById(`pitLap${i}`).value);
+        // make sure int and so just round to the nearest int
+        const lap = Math.round(parseInt(document.getElementById(`pitLap${i}`).value));
         const tyre = document.getElementById(`pitTyre${i}`).value;
         
+        // good error handling
         if (!lap || lap <= 0 || lap >= raceLength) {
             status.textContent = `Please enter valid pit lap for Pit Stop ${i + 1} (between 1 and ${raceLength - 1})`;
             status.className = 'status-message status-error';
@@ -1294,7 +1281,7 @@ async function compareCustomStrategy() {
     const stints = [];
     let currentLap = 0;
     let currentTyre = startingTyre;
-    
+    // get stint lengths
     for (let i = 0; i < numStops; i++) {
         const pitLap = pitLaps[i];
         const stintLength = pitLap - currentLap;
@@ -1346,6 +1333,7 @@ async function compareCustomStrategy() {
         }
         
         // Calculate best strategy time
+        // change structure for consistency with variable names
         const bestStints = globalBestStrategy.stints.map(s => ({
             compound: s.compound,
             laps: s.length
@@ -1390,7 +1378,7 @@ async function compareCustomStrategy() {
         );
         resultDiv.appendChild(customRow);
         
-        // Check if strategy uses only one compound
+        // Check if strategy uses only one compound - illegal
         const uniqueCompounds = new Set(stints.map(s => s.compound.toUpperCase()));
         const isIllegal = uniqueCompounds.size < 2;
         
@@ -1445,7 +1433,7 @@ function createStrategyDisplayRow(label, stints, totalTime, delta, totalLaps, pi
     totalTimeSpan.style.cssText = 'font-weight: bold;';
     
     timeDiv.appendChild(totalTimeSpan);
-    
+    // Get correct signs for text
     if (delta !== 0) {
         const deltaSpan = document.createElement('span');
         deltaSpan.textContent = delta > 0 ? `+${delta.toFixed(3)}s` : `${delta.toFixed(3)}s`;
@@ -1461,20 +1449,6 @@ function createStrategyDisplayRow(label, stints, totalTime, delta, totalLaps, pi
     const barWrapper = document.createElement('div');
     barWrapper.className = 'strategy-bar-wrapper';
     barWrapper.style.cssText = 'position: relative; width: 100%; height: 35px; background: #f3f3f3; border-radius: 6px; overflow: hidden; border: 1px solid #ddd;';
-    
-    // Add lap ticks
-    const ticks = document.createElement('div');
-    ticks.className = 'lap-ticks';
-    const tickInterval = Math.max(1, Math.ceil(totalLaps / 6));
-    for (let lap = 1; lap <= totalLaps; lap += tickInterval) {
-        const tick = document.createElement('span');
-        tick.className = 'lap-tick';
-        const leftPct = ((lap - 1) / totalLaps) * 100;
-        tick.style.left = leftPct + '%';
-        tick.textContent = lap;
-        ticks.appendChild(tick);
-    }
-    barWrapper.appendChild(ticks);
     
     // Add stint segments
     stints.forEach(stint => {
@@ -1510,21 +1484,16 @@ function createStrategyDisplayRow(label, stints, totalTime, delta, totalLaps, pi
     
     // Strategy details
     const detailsDiv = document.createElement('div');
-    detailsDiv.style.cssText = 'margin-top: 10px; font-size: 13px; color: #666;';
-    const strategyText = stints.map(s => `${s.compound} (${s.laps}L)`).join(' → ');
+    detailsDiv.style.cssText = 'margin-top: 10px; font-size: 12px; color: #666;';
+    const strategyText = stints.map(s => `${s.compound} (${s.laps}L)`).join('->');
     detailsDiv.textContent = `Strategy: ${strategyText}`;
     rowDiv.appendChild(detailsDiv);
     
     return rowDiv;
 }
 
-// Ensure monte dropdown updates when page loads with country/year change
+// Ensure user strategy boxes are available upon load
 document.addEventListener('DOMContentLoaded', () => {
-    const selectYear = document.getElementById('yearSelect');
-    const selectCountry = document.getElementById('circuitSelect');
-    if (selectYear) selectYear.addEventListener('change', () => { /* no-op until load */ });
-    if (selectCountry) selectCountry.addEventListener('change', () => { /* no-op until load */ });
-    
     // Initialize custom strategy inputs
     if (typeof updateCustomStrategyInputs === 'function') {
         updateCustomStrategyInputs();

@@ -20,6 +20,7 @@ namespace F1_simulation.Database
         {
             using (MySqlConnection conn = new MySqlConnection(_connection))
             {
+                // cross table parameterised SQL
                 int laps = 0;
                 conn.Open();
                 string query = @"
@@ -41,7 +42,7 @@ namespace F1_simulation.Database
                 return laps;
             }
         }
-
+        // Query the tyre curves
         public List<string> GetTyreCurves(string circuit, int year)
         {
             List<string> curves = [];
@@ -74,10 +75,11 @@ namespace F1_simulation.Database
             }
             return curves;
         }
-
+        // Cache the tyre curves
         public void AddTyreCurves(string circuit, int year, string compound, double gradient, double intercept)
         {
             int raceid = 0;
+            // First find the raceID that will be associated with these tyre curves
             using (MySqlConnection conn = new MySqlConnection(_connection))
             {
                 conn.Open();
@@ -123,8 +125,8 @@ namespace F1_simulation.Database
                 }
             } 
         }
-        // add sessions
 
+        // query sessions
         public List<int> GetSessionKeys(string circuit, int year)
         {
             List<int> keys = [];
@@ -160,6 +162,7 @@ namespace F1_simulation.Database
         public void AddSessions(string circuit, int year, List<int> session_keys)
         {
             int raceid = 0;
+            // Find the raceID
             using (MySqlConnection conn = new MySqlConnection(_connection))
             {
                 conn.Open();
@@ -185,6 +188,7 @@ namespace F1_simulation.Database
                 }
                 
                 // Only insert if we found a valid raceID
+                // Good error handling - user can't see this but I can
                 if (raceid == 0)
                 {
                     Console.WriteLine($"Warning: No race found for circuit '{circuit}' and year {year}. Skipping session cache.");
@@ -284,7 +288,6 @@ namespace F1_simulation.Database
 
                 foreach (var entry in qualifyingData)
                 {
-                    // Get or create driver
                     int driverId = GetDriver(conn, Convert.ToInt32(entry["driver_number"]));
                     
                     string insertQuery = @"
@@ -380,7 +383,7 @@ namespace F1_simulation.Database
 
                 foreach (var entry in racePaceData)
                 {
-                    // Get or create driver
+                    // Get driverID
                     int driverId = GetDriver(conn, Convert.ToInt32(entry["driver_number"]));
                     
                     string insertQuery = @"
@@ -806,6 +809,7 @@ namespace F1_simulation.Database
         {
             using (MySqlConnection conn = new MySqlConnection(_connection))
             {
+                // Aggregate SQL queries
                 conn.Open();
                 string query = @"
                 SELECT COUNT(*) as count

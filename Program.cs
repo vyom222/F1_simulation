@@ -8,7 +8,7 @@ using Microsoft.Extensions.FileProviders;
 var builder = WebApplication.CreateBuilder(args);
 
 // Database connection string - update password as needed
-var connectionString = "server=127.0.0.1;port=3306;database=F1;user=root;password=*********;";
+var connectionString = "server=127.0.0.1;port=3306;database=F1;user=root;password=********;";
 
 // Add services
 builder.Services.AddSingleton(new F1_cache(connectionString));
@@ -32,10 +32,11 @@ var baseDir = Directory.GetCurrentDirectory();
 var staticDir = Path.Combine(baseDir, "Static");
 var templatesDir = Path.Combine(baseDir, "Templates");
 
-// Configure middleware
+// Open the API up to a web inferface and to test the C# API while developing the front end
 app.UseSwagger();
 app.UseSwaggerUI();
 
+// Allows API calls from anywhere 
 app.UseCors("AllowAll");
 app.UseAuthorization();
 

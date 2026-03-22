@@ -62,13 +62,15 @@ window.addEventListener('load', async function() {
     }, 1000);
 });
 
-function runAll() {
+async function runAll() {
     loadTyreCurves();
-    loadStrats();
     loadQuali();
     loadRacePace();
     loadRaceSimulation();
     loadMonteCarlo();
+    // compare custom strats only works once the topstrats has been loaded so we must wait for that
+    await loadStrats();
+    compareCustomStrategy();
 }
 
 function loadTyreCurves() {
@@ -1018,7 +1020,7 @@ function populateRaceResultsTable(raceResults) {
         stratCell.textContent = result.strategy;
         stratCell.style.padding = '10px 12px';
         stratCell.style.border = '1px solid #ddd';
-        stratCell.style.fontFamily = 'Inter';
+        stratCell.style.fontFamily = 'Arial';
         row.appendChild(stratCell);
 
         // Total Time
@@ -1027,7 +1029,7 @@ function populateRaceResultsTable(raceResults) {
         timeCell.style.padding = '10px 12px';
         timeCell.style.border = '1px solid #ddd';
         timeCell.style.textAlign = 'right';
-        timeCell.style.fontFamily = 'Inter';
+        timeCell.style.fontFamily = 'Arial';
         row.appendChild(timeCell);
 
         // Delta to First
@@ -1040,7 +1042,7 @@ function populateRaceResultsTable(raceResults) {
         deltaCell.style.padding = '10px 12px';
         deltaCell.style.border = '1px solid #ddd';
         deltaCell.style.textAlign = 'right';
-        deltaCell.style.fontFamily = 'Inter';
+        deltaCell.style.fontFamily = 'Arial';
         row.appendChild(deltaCell);
 
         tbody.appendChild(row);
@@ -1123,7 +1125,7 @@ function populateStandingsTable(averagePositions) {
         avgCell.style.padding = '8px 10px';
         avgCell.style.border = '1px solid #ddd';
         avgCell.style.textAlign = 'center';
-        avgCell.style.fontFamily = 'Inter';
+        avgCell.style.fontFamily = 'Arial';
         row.appendChild(avgCell);
 
         tbody.appendChild(row);
@@ -1223,6 +1225,10 @@ async function compareCustomStrategy() {
     const button = document.getElementById('compareStrategyBtn');
     const resultContainer = document.getElementById('customStrategyResultContainer');
     const resultDiv = document.getElementById('customStrategyResult');
+
+    // Always destroy old graph at the very start
+    resultDiv.innerHTML = '';
+    resultContainer.style.display = 'none';
     
     const circuit = document.getElementById('circuitSelect').value;
     const year = document.getElementById('yearSelect').value;
@@ -1345,8 +1351,6 @@ async function compareCustomStrategy() {
         
         // Calculate delta
         const delta = customResult.totalTime - bestResult.totalTime;
-        
-        resultDiv.innerHTML = '';
         
         // Calculate pit laps for best strategy
         const bestPitLaps = [];

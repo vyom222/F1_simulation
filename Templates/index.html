@@ -4,9 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>F1 Simulation - Dashboard</title>
-    <!-- get the font-->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         /* Apply to every element on the page */
@@ -18,8 +15,8 @@
         }
         body {
             background: linear-gradient(135deg, #b1d9e8 0%, #719cf9 100%);
-            /* defensive programming */
-            font-family: 'Inter', sans-serif;
+            /* defensive programming by having a fall back*/
+            font-family: 'Arial', sans-serif;
             padding: 20px;
             min-height: 100vh;
         }
@@ -100,7 +97,7 @@
             color: #00ff00;
             padding: 15px;
             border-radius: 5px;
-            font-family: 'Inter', sans-serif;
+            font-family: 'Arial', sans-serif;
             font-size: 13px;
             line-height: 1.5;
             max-height: 600px;
